@@ -57,7 +57,7 @@ void query_disks(void)
 	printf("Number of Heads: %d\n", di.head);
 	printf("Number of Cylinders: %d\n", di.track);
 	printf("Number of Sectors per Cylinder: %d\n", di.sector);
-	printf("Total Number of Sectors: %ul\n", total_sectors);
-	printf("Estimated number of raw bytes at 512 bytes per cluster: %ul\n", total_sectors * 512);
+	printf("Total Number of Sectors: %lu\n", total_sectors);
+	printf("Estimated number of raw bytes at 512 bytes per cluster: %lu\n", total_sectors * 512);
 }
 
