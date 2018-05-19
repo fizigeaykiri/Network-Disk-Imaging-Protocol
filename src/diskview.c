@@ -26,6 +26,8 @@ void query_disks(void)
 	union REGS regs;
 	struct SREGS sregs;
 	
+	unsigned long total_sectors;
+	
 	regs.h.ah = 0x08;
 	regs.h.dl = 0x80 | 0;
 	
@@ -49,9 +51,13 @@ void query_disks(void)
 	di.head = regs.h.dh + 1;
 	di.drive = regs.h.dl;
 	
+	total_sectors = di.head * di.track * di.sector;
+	
 	printf("Number of Drives: %d\n", di.drive);
 	printf("Number of Heads: %d\n", di.head);
 	printf("Number of Cylinders: %d\n", di.track);
 	printf("Number of Sectors per Cylinder: %d\n", di.sector);
+	printf("Total Number of Sectors: %ul\n", total_sectors);
+	printf("Estimated number of raw bytes at 512 bytes per cluster: %ul\n", total_sectors * 512);
 }
 
