@@ -47,7 +47,7 @@ void query_disks(void)
 	//di.track = (((regs.h.cl & 0xC0) >> 6) | regs.h.ch) + 1;
 	di.track = regs.h.cl & 0xC0;
 	di.track = ((regs.h.cl << 2) | regs.h.ch) + 1;
-	di.sector = (regs.h.cl & 0x3F) + 1;
+	di.sector = regs.h.cl & 0x3F;
 	di.head = regs.h.dh + 1;
 	di.drive = regs.h.dl;
 	

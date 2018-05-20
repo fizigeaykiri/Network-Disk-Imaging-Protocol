@@ -8,6 +8,8 @@
 #include <i86.h>
 
 struct diskinfo_t query_disks(void);
+int verify_2(unsigned char drive_num);
+int verify_mbr(int drive_num);
 int query_mbr(int drive_num);
 void display_buffer(unsigned char *disk_buffer, unsigned int buffer_len);
 void disk_error(unsigned short status);
@@ -18,14 +20,16 @@ int main(int argc, char *argv[])
 	struct diskinfo_t di;
 	
 	printf("MbrView - displays MBR of default hard drive in Hex\n\n");
-	
+	    
 	di = query_disks();
 	if (di.drive == 0) {
 		printf("No Hard Drives were found.\n");
 		return -1;
 	}
 	
-	query_mbr(0);
+    //verify_2(0);
+        verify_mbr(0);
+    query_mbr(0);
 	
 	return 0;
 }
@@ -37,8 +41,11 @@ struct diskinfo_t query_disks(void)
 	union REGS regs;
 	struct SREGS sregs;
 	
+    unsigned long total_sectors;
+    
 	regs.h.ah = 0x08;
 	regs.h.dl = 0x80 | 0;
+    //regs.h.dl = 0;
 	
 	// set the segment and index to guard against BIOS bugs
 	regs.w.di = 0x0000;
@@ -48,41 +55,118 @@ struct diskinfo_t query_disks(void)
 	
 	di.track = regs.h.cl & 0xC0;
 	di.track = ((regs.h.cl << 2) | regs.h.ch) + 1;
-	di.sector = (regs.h.cl & 0x3F) + 1;
+	di.sector = regs.h.cl & 0x3F;
 	di.head = regs.h.dh + 1;
 	di.drive = regs.h.dl;
 	
+    total_sectors = di.head * di.track * di.sector;
+    
+    printf("Drive parameters:\n");
+    printf("Number of Drives: %d\n", di.drive);
+	printf("Number of Heads: %d\n", di.head);
+	printf("Number of Cylinders: %d\n", di.track);
+	printf("Number of Sectors per Cylinder: %d\n", di.sector);
+	printf("Total Number of Sectors: %lu\n", total_sectors);
+	printf("Estimated number of raw bytes at 512 bytes per cluster: %lu\n", total_sectors * 512);
+    
 	return di;
 }
 
-int query_mbr(int drive_num)
+int verify_2(unsigned char drive_num)
 {
-	unsigned char disk_buffer[1024];
-	
-	struct diskinfo_t di;
-	unsigned short status = 0;
-	
-	// Reset disks
-	/*
-	di.drive = 0x80 | drive_num;
+    union REGS regs;
+    struct SREGS sregs;
+    
+    struct diskinfo_t di;
+    unsigned short status;
+    
+    regs.h.ah = 0x04;
+    regs.h.al = 1;
+    regs.h.cl = 1;
+    regs.h.dh = 0;
+    regs.h.dl = drive_num;
+    
+    regs.w.bx = 0x0000;
+    sregs.es = 0x0000;
+    
+    /*
+    // Reset disks
+	//di.drive = 0x80 | drive_num;
+    di.drive = drive_num;
 	status = _bios_disk(_DISK_RESET, &di);
 	if (status > 0) {
 		disk_error(status);
 		//return -1;
 	}
-	*/
+    */
+    
+    int86x(0x13, &regs, &regs, &sregs);
+    
+    printf("Disk Verify 2 Status Code 0x%02X\n", regs.h.ah);
+    
+    return 0;
+}
+
+int verify_mbr(int drive_num)
+{
+    //unsigned char disk_buffer[1024] = {0};
+    
+    struct diskinfo_t di;
+    unsigned short status;
+    
+    // Reset disks
+	di.drive = 0x80 | drive_num;
+    //di.drive = drive_num;
+	status = _bios_disk(_DISK_RESET, &di);
+	if (status > 0) {
+		disk_error(status);
+		//return -1;
+	}
+    
+    di.drive = 0x80 | drive_num;
+    di.head = di.track = 0;
+    di.sector = 1;
+    di.nsectors = 1;
+    //di.buffer = disk_buffer;
+    di.buffer = NULL;
+    
+    status = _bios_disk(_DISK_VERIFY, &di) >> 8;
+    
+    printf("Disk Verify Status Code 0x%02X\n", status);
+    if (status > 0) {
+        disk_error(status);
+    }
+    
+    return 0;
+}
+
+int query_mbr(int drive_num)
+{
+	unsigned char disk_buffer[1024] = {0};
 	
-	//di.drive = 0x80 | drive_num;
-	di.drive = 0;
+	struct diskinfo_t di;
+	unsigned short status = 0;
+	
+    // Reset disks
+	di.drive = 0x80 | drive_num;
+    //di.drive = drive_num;
+	status = _bios_disk(_DISK_RESET, &di);
+	if (status > 0) {
+		disk_error(status);
+		//return -1;
+	}
+    
+	di.drive = 0x80 | drive_num;
+	//di.drive = 0;
 	di.head = 0;
 	di.track = 0;
-	di.sector = 0;
+	di.sector = 1;
 	di.nsectors = 1;
 	di.buffer = disk_buffer;
 	
 	printf("Querying boot sector...\n");
 	
-	status = _bios_disk(_DISK_READ, &di);
+	status = _bios_disk(_DISK_READ, &di) >> 8;
 	if (status > 0) {
 		disk_error(status);
 		//return -1;
@@ -112,6 +196,8 @@ void display_buffer(unsigned char *disk_buffer, unsigned int buffer_len)
 
 void disk_error(unsigned short status)
 {
+    printf("Error 0x%02X: ", status);
+    
 	switch (status) {
 		case 0x01:
 			printf("Bad Command\n");
@@ -216,7 +302,7 @@ void disk_error(unsigned short status)
 			printf("Sense operation failed\n");
 			break;
 		default:
-			printf("Unknown error %0X\n", status);
+			printf("Unknown error 0x%4.4X\n", status);
 	}
 }
 
