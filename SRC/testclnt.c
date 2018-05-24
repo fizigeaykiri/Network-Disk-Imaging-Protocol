@@ -25,9 +25,14 @@ int main(int argc, char *argv[])
 	
 	
 	char *hello = "Hello from client";
+    char *serv_ip = "127.0.0.1";
 	
     tv.tv_sec = 20;
     tv.tv_usec = 0;
+
+    if (argc >= 2) {
+        serv_ip = argv[1];
+    }
 
 	//buffer = {0};
 	
@@ -42,7 +47,7 @@ int main(int argc, char *argv[])
 	serv_addr.sin_port = htons(PORT);
 	
 	// Convert IPv4 & IPv6 addresses from text to binary
-	if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+	if (inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr) <= 0) {
 		printf("\nInvalid address/ Address not supported \n");
 		return -1;
 	}
