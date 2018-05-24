@@ -13,18 +13,23 @@
 
 #define PORT	5050
 
-char buffer[1024]; 
+char buffer[1024] = {0}; 
  
 int main(int argc, char *argv[])
 {
 	struct sockaddr_in address;
+    struct sockaddr_in serv_addr;
+    struct timeval tv;
 	int sock = 0;
 	int valread;
-	struct sockaddr_in serv_addr;
+	
 	
 	char *hello = "Hello from client";
 	
-	buffer = {0};
+    tv.tv_sec = 20;
+    tv.tv_usec = 0;
+
+	//buffer = {0};
 	
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
@@ -47,21 +52,40 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char *) &tv, sizeof(tv)) < 0) {
+        printf("Time Out\n");
+        return -1;
+    }
+
 	send(sock, hello, strlen(hello), 0);
 	printf("Hello message sent\n");
 	
 	do {
+        if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &tv, sizeof(tv)) < 0) {
+            printf("Time Out\n");
+            return -1;
+        }
+
 		valread = read(sock, buffer, 1024);
 		printf("%s\n", buffer);
 		
 		fgets(buffer, 1024, stdin);
+        printf("Input received\n");
+
+        if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char *) &tv, sizeof(tv)) < 0) {
+            printf("Time Out\n");
+            return -1;
+        }
+
 		send(sock, buffer, strlen(buffer), 0);
 		printf("Message sent\n");
 		//valread = read(sock, buffer, 1024);
 		//printf("%s\n", buffer);
 		
-	} (while (strcmp(buffer, "end") != 0));	
+	} while (strcmp(buffer, "end\n") != 0);	
 	
+    close(sock);
+
 	return 0;
 }
 
