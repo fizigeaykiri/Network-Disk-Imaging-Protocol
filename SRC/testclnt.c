@@ -74,8 +74,16 @@ int main(int argc, char *argv[])
 		valread = read(sock, buffer, 1024);
 		printf("%s\n", buffer);
 		
-		fgets(buffer, 1024, stdin);
+        printf("Enter any text to send to server. Enter 'end' to exit client: ");
+		fgets(buffer, 1023, stdin);
+        //buffer[0] = '\0';   // Invalidate buffer string to allow next input - doesn't work
+
+        //sscanf("Enter any text to send to server. Enter 'end' to exit: %s", buffer);
+
         printf("Input received\n");
+        // end input with null to terminate string
+        //buffer[strlen(buffer)] = '\0';  // Doesn't work
+
 
         if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char *) &tv, sizeof(tv)) < 0) {
             printf("Time Out\n");
