@@ -34,8 +34,8 @@ int8_t   Listening = -1;         // Are we the server (1) or the client (0)?
 
 
 #define RECV_BUFFER_SIZE (1024)
-uint8_t recvBuffer[ RECV_BUFFER_SIZE ];
-
+uint8_t recvBuffer[RECV_BUFFER_SIZE];
+uint8_t sendBuffer[RECV_BUFFER_SIZE];
 
 // Trap Ctrl-Break and Ctrl-C to that we can unhook the timer interrupt
 //  and shutdown cleanly.
@@ -179,6 +179,7 @@ int main(int argc, char *argv[])
     }
     
     uint8_t done = 0;
+    int char_count = 0;
     
     while (!done) {
         if (CtrlBreakDetected) {
@@ -215,10 +216,25 @@ int main(int argc, char *argv[])
                 else if (ekey == 35) {  // Alt-H
                     printf("\nMTCPTSTC: Press Alt-X to exit\n\n");
                 }
-            } else {
-                int8_t sendRc = mySocket->send((uint8_t *)&ch, 1);
+            } else if (ch == 13) {
+                fprintf(stderr, "\n");
+                int8_t sendRc = mySocket->send(sendBuffer, char_count);
+                char_count = 0;
                 if (sendRc < 1) {
                     fprintf(stderr, "Unable to send packet\n");
+                }
+            } else {
+                fprintf(stderr, "%c", ch);
+                sendBuffer[char_count] = ch;
+                char_count++;
+                
+                if (char_count >= RECV_BUFFER_SIZE) {
+                    int8_t sendRc = mySocket->send(sendBuffer, char_count);
+                    char_count = 0;
+                    fprintf(stderr, "\n");
+                    if (sendRc < 1) {
+                        fprintf(stderr, "Unable to send packet\n");
+                    }
                 }
             }
         }

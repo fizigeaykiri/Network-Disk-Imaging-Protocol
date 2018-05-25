@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
 	struct sockaddr_in address;
 	int opt = 1;
 	int addrlen = sizeof(address);
-	char *hello = "Hello from server";
+	char *hello = "Hello from server\n";
 	
 	//buffer[1024] = {0};
 	
