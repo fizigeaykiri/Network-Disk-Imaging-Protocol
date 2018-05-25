@@ -13,14 +13,16 @@
 
 #define PORT 	5050
 
-char buffer[1024];
+char buffer[1024] = {0};
 
-volatile sig_atomic_t stop;
+//volatile sig_atomic_t stop;
 
+/*
 void inthand(int signum)
 {
 	stop = 1;
 }
+*/
 
 int main(int argc, char *argv[])
 {
@@ -28,9 +30,9 @@ int main(int argc, char *argv[])
 	struct sockaddr_in address;
 	int opt = 1;
 	int addrlen = sizeof(address);
-	char *hello = "Hello from server";
+	char *hello = "Hello from server\n";
 	
-	buffer[1024] = {0};
+	//buffer[1024] = {0};
 	
 	
 	// Creating socket file descriptor
@@ -40,13 +42,15 @@ int main(int argc, char *argv[])
 	}
 	
 	// Forcefully attaching socket to the port
+    /*
 	if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
 		perror("setsockopt failed");
 		exit(EXIT_FAILURE);
 	}
+    */
 	
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
+	address.sin_addr.s_addr = htonl(INADDR_ANY);
 	address.sin_port = htons(PORT);
 	
 	// Forcefully attaching socket to the port
@@ -55,24 +59,30 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 	
-	signal(SIGINT, inthand);
-	
-	while (!stop) {	
-		if (listen(server_fd, 3) < 0) {
-			perror("listen failed");
-			exit(EXIT_FAILURE);
-		}
-	
-		if ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen)) < 0) {
+    if (listen(server_fd, 3) < 0) {
+		perror("listen failed");
+		exit(EXIT_FAILURE);
+	}
+
+    if ((new_socket = accept(server_fd, (struct sockaddr *) &address, (socklen_t *) &addrlen)) < 0) {
 			perror("accept");
 			exit(EXIT_FAILURE);
-		}
+    }
+    printf("Connection accepted\n");
+
+	//signal(SIGINT, inthand);
 	
-		valread = read(new_socket, buffer, 1024);
+	//while (!stop) {
+    while (1) {	
+		//valread = read(new_socket, buffer, 1024);
+        valread = recv(new_socket, buffer, 1024, 0);
 		printf("%s\n", buffer);
 		send(new_socket, hello, strlen(hello), 0);
 		printf("Hello message sent\n");
 	}
 	
+    close(new_socket);
+    close(server_fd);
+
 	return 0;
 }

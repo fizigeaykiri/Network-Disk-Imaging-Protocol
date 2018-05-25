@@ -13,18 +13,28 @@
 
 #define PORT	5050
 
-char buffer[1024]; 
+char buffer[1024] = {0}; 
  
 int main(int argc, char *argv[])
 {
 	struct sockaddr_in address;
+    struct sockaddr_in serv_addr;
+    struct timeval tv;
 	int sock = 0;
 	int valread;
-	struct sockaddr_in serv_addr;
+	
 	
 	char *hello = "Hello from client";
+    char *serv_ip = "127.0.0.1";
 	
-	buffer = {0};
+    tv.tv_sec = 20;
+    tv.tv_usec = 0;
+
+    if (argc >= 2) {
+        serv_ip = argv[1];
+    }
+
+	//buffer = {0};
 	
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		printf("\n Socket creation error \n");
@@ -37,7 +47,7 @@ int main(int argc, char *argv[])
 	serv_addr.sin_port = htons(PORT);
 	
 	// Convert IPv4 & IPv6 addresses from text to binary
-	if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0) {
+	if (inet_pton(AF_INET, serv_ip, &serv_addr.sin_addr) <= 0) {
 		printf("\nInvalid address/ Address not supported \n");
 		return -1;
 	}
@@ -47,21 +57,48 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 	
+    if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char *) &tv, sizeof(tv)) < 0) {
+        printf("Time Out\n");
+        return -1;
+    }
+
 	send(sock, hello, strlen(hello), 0);
 	printf("Hello message sent\n");
 	
 	do {
+        if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *) &tv, sizeof(tv)) < 0) {
+            printf("Time Out\n");
+            return -1;
+        }
+
 		valread = read(sock, buffer, 1024);
 		printf("%s\n", buffer);
 		
-		fgets(buffer, 1024, stdin);
+        printf("Enter any text to send to server. Enter 'end' to exit client: ");
+		fgets(buffer, 1023, stdin);
+        //buffer[0] = '\0';   // Invalidate buffer string to allow next input - doesn't work
+
+        //sscanf("Enter any text to send to server. Enter 'end' to exit: %s", buffer);
+
+        printf("Input received\n");
+        // end input with null to terminate string
+        //buffer[strlen(buffer)] = '\0';  // Doesn't work
+
+
+        if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (char *) &tv, sizeof(tv)) < 0) {
+            printf("Time Out\n");
+            return -1;
+        }
+
 		send(sock, buffer, strlen(buffer), 0);
 		printf("Message sent\n");
 		//valread = read(sock, buffer, 1024);
 		//printf("%s\n", buffer);
 		
-	} (while (strcmp(buffer, "end") != 0));	
+	} while (strcmp(buffer, "end\n") != 0);	
 	
+    close(sock);
+
 	return 0;
 }
 
