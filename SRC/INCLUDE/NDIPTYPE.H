@@ -30,6 +30,8 @@
     #include "TYPES.H"
 #endif
 
+#define SECTOR_SIZE 512
+
 // Reference: https://stackoverflow.com/questions/2182002/convert-big-endian-to-little-endian-in-c-without-using-provided-func
 
 //! Byte swap unsigned short
