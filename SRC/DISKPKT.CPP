@@ -14,9 +14,40 @@ DISKPKT::DISKPKT(void)
 }
 */
 
+DISKPKT::DISKPKT(uint8_t *raw_stream, int mode)
+{
+    //int i = 0;
+    switch (mode) {
+        case DECODE_PARAMS:
+            memset(&dparams, 0, sizeof(struct dsk_params));
+            memcpy(&dparams, raw_stream, sizeof(struct dsk_params));
+            if (!valid_crc(DECODE_PARAMS)) {
+                fprintf(stderr, "Bad CRC on Disk Parameters\n");
+                status_code = NDIP_ERR_BAD_CRC;
+            } else {
+                status_code = NDIP_OK;
+            }
+            break;
+        case DECODE_SECS:
+            memset(&dsp, 0, sizeof(struct dsk_sect_pkt));
+            memcpy(&dsp, raw_stream, sizeof(struct dsk_sect_pkt));
+            if (!valid_crc(DECODE_SECS)) {
+                fprintf(stderr, "Bad CRC on Disk Sector Packet\n");
+                status_code = NDIP_ERR_BAD_CRC;
+            } else {
+                status_code = NDIP_OK;
+            }
+            break;
+        default:
+            fprintf(stderr, "Invalid Decoding mode parameter to DISKPKT::DISKPKT: %d\n", mode);
+            status_code = NDIP_INVALID_PARAM;
+    }
+}
+
 DISKPKT::DISKPKT(char *file_name, uint16_t disk_num, uint16_t track_count, uint16_t head_count, uint16_t sector_count)
 {
     strcpy(dsp.file_name, file_name);
+    dparams.protocol_version = PROTOCOL_VER;
     dparams.disk_num = disk_num;
     dparams.track_count = track_count;
     dparams.head_count = head_count;
@@ -24,46 +55,52 @@ DISKPKT::DISKPKT(char *file_name, uint16_t disk_num, uint16_t track_count, uint1
 
     // Networking Standard is Big-Endian, so if on a Little-Endian system, we need to reverse the bytes
     if (isLittleEndian()) {
+        dparams.protocol_version = swap_uint16(dparams.protocol_version);
         dparams.disk_num = swap_uint16(dparams.disk_num);
         dparams.track_count = swap_uint16(dparams.track_count);
         dparams.head_count = swap_uint16(dparams.head_count);
         dparams.sector_count = swap_uint16(dparams.sector_count);
     }
 
-    dparams.param_crc = calc_crc16((uint8_t *) &dparams, sizeof(struct dsk_params) - sizeof(u_int16_t));
+    dparams.param_crc = calc_crc16((uint8_t *) &dparams, sizeof(struct dsk_params) - sizeof(uint16_t));
 
     if (isLittleEndian()) {
         dparams.param_crc = swap_uint16(dparams.param_crc);
     }
+
+    status_code = NDIP_CLIENT_SEND;
 }
 
 //struct dsk_sect_pkt init(char *file_name, int disk_num, int track_num, int head_num, int sector_num, int total_sector_count)
 DISKPKT::DISKPKT(char *file_name, uint8_t *sector_data, uint16_t disk_num, uint16_t track_num, uint16_t head_num, uint16_t sector_num, int total_sector_count)
 {
     //struct dsk_sect_pkt dsp;
-    //dsp.file_name = file_name;
-    strcpy(dsp.file_name, file_name);
     //dsp.sector_data = sector_data;
     memcpy(dsp.sector, sector_data, SECTOR_SIZE);
+    //dsp.file_name = file_name;
+    strcpy(dsp.file_name, file_name);
 
+    dsp.protocol_version = PROTOCOL_VER;
     dsp.disk_num = disk_num;
     dsp.track_num = track_num;
     dsp.head_num = head_num;
     dsp.sector_num = sector_num;
-    dsp.logical_sector_num = SECTOR_SIZE * sector_num * head_num * track_num;
-    dsp.total_sector_count = total_sector_count;
+    //dsp.logical_sector_num = sector_num * head_num * track_num;
+    //dsp.total_sector_count = total_sector_count;
+    //dsp.total_sector_count = 0;
 
     // Networking Standard is Big-Endian, so if on a Little-Endian system, we need to reverse the bytes
     if (isLittleEndian()) {
+        dsp.protocol_version = swap_uint16(dsp.protocol_version);
         dsp.disk_num = swap_uint16(dsp.disk_num);
         dsp.track_num = swap_uint16(dsp.track_num);
         dsp.head_num = swap_uint16(dsp.head_num);
         dsp.sector_num = swap_uint16(dsp.sector_num);
-        dsp.logical_sector_num = swap_uint32(dsp.logical_sector_num);
-        dsp.total_sector_count = swap_uint32(dsp.total_sector_count);
+        //dsp.logical_sector_num = swap_uint32(dsp.logical_sector_num);
+        //dsp.total_sector_count = swap_uint32(dsp.total_sector_count);
     }
 
-    dsp.packet_crc = calc_crc16((uint8_t *) &dsp, sizeof(struct dsk_sect_pkt) - sizeof(u_int16_t));
+    dsp.packet_crc = calc_crc16((uint8_t *) &dsp, sizeof(struct dsk_sect_pkt) - sizeof(uint16_t));
 
     if (isLittleEndian()) {
         dsp.packet_crc = swap_uint16(dsp.packet_crc);
@@ -84,20 +121,117 @@ char *DISKPKT::get_filename(void)
     return dsp.file_name;
 }
 
+//TODO: FIXME
 uint32_t DISKPKT::get_logical_sectors(int mode)
 {
     switch (mode) {
         case LOG_SEC_CUR:
-            return dsp.logical_sector_num;
+            //return dsp.logical_sector_num;
+            return 1;
             break;
         case LOG_SEC_TOT:
-            return dsp.total_sector_count;
+            //return dsp.total_sector_count;
+            return 1;
             break;
         default:
-            fprintf(stderr, "Invalid mode parameter to DSKPKT::get_logical_sectors: %d", mode);
+            fprintf(stderr, "Invalid mode parameter to DSKPKT::get_logical_sectors: %d\n", mode);
             return 0;
     }
 }
+
+uint8_t DISKPKT::get_status_code(void)
+{
+    return status_code;
+}
+
+bool DISKPKT::set_status_code(uint8_t code)
+{
+    if (code != NDIP_CLIENT_SEND && ((code & 0x0F) <= NDIP_INVALID_PARAM && (code & 0xF0) <= NDIP_TRANS_COMPLETE)) {
+        status_code = code;
+        return false;
+    }
+
+    return true;
+}
+
+uint8_t* DISKPKT::get_raw_stream(int mode)
+{
+    switch (mode) {
+        case DECODE_PARAMS:
+            return (uint8_t*) &dparams;
+            break;
+        case DECODE_SECS:
+            return (uint8_t*) &dsp;
+            break;
+        default:
+            fprintf(stderr, "Invalid Decoding mode parameter to DISKPKT::get_raw_stream: %d\n", mode);
+    }
+
+    return NULL;
+}
+
+
+uint16_t DISKPKT::get_protocol_version(int mode)
+{
+    switch (mode) {
+        case DECODE_PARAMS:
+            return (isLittleEndian()) ? swap_uint16(dparams.protocol_version) : dparams.protocol_version;
+            break;
+        case DECODE_SECS:
+            return (isLittleEndian()) ? swap_uint16(dsp.protocol_version) : dsp.protocol_version;
+            break;
+        default:
+            fprintf(stderr, "Invalid Decoding mode parameter to DISKPKT::get_protocol_version: %d\n", mode);
+    }
+
+    return 0;
+}
+
+
+uint16_t DISKPKT::get_disk_parameter(int disk_param)
+{
+    switch (disk_param) {
+        case DISK_PARAM_DISK_NUM:
+            return (isLittleEndian()) ? swap_uint16(dparams.disk_num) : dparams.disk_num;
+            break;
+        case DISK_PARAM_TRACK_NUM:
+            return (isLittleEndian()) ? swap_uint16(dparams.track_count) : dparams.track_count;
+            break;
+        case DISK_PARAM_HEAD_NUM:
+            return (isLittleEndian()) ? swap_uint16(dparams.head_count) : dparams.head_count;
+            break;
+        case DISK_PARAM_SECT_NUM:
+            return (isLittleEndian()) ? swap_uint16(dparams.sector_count) : dparams.sector_count;
+            break;
+        default:
+            fprintf(stderr, "Invalid disk parameter to DISKPKT::get_disk_parameter: %d\n", disk_param);
+    }
+
+    return 0xFFFF;
+}
+
+uint16_t DISKPKT::get_sector_loc(int disk_param)
+{
+    switch (disk_param) {
+        case DISK_PARAM_DISK_NUM:
+            return (isLittleEndian()) ? swap_uint16(dsp.disk_num) : dsp.disk_num;
+            break;
+        case DISK_PARAM_TRACK_NUM:
+            return (isLittleEndian()) ? swap_uint16(dsp.track_num) : dsp.track_num;
+            break;
+        case DISK_PARAM_HEAD_NUM:
+            return (isLittleEndian()) ? swap_uint16(dsp.head_num) : dsp.head_num;
+            break;
+        case DISK_PARAM_SECT_NUM:
+            return (isLittleEndian()) ? swap_uint16(dsp.sector_num) : dsp.sector_num;
+            break;
+        default:
+            fprintf(stderr, "Invalid disk parameter to DISKPKT::get_sector_loc: %d\n", disk_param);
+    }
+
+    return 0xFFFF;
+}
+
 
 /*
 unsigned int calculate_checksum(dsk_sect_pkt *dsp)   // experimental CRC
@@ -118,7 +252,7 @@ unsigned int calculate_checksum(dsk_sect_pkt *dsp)   // experimental CRC
 */
 
 // Reference: http://www.sunshine2k.de/articles/coding/crc/understanding_crc.html
-uint16_t calc_crc16(uint8_t *data_stream, int data_len)
+uint16_t DISKPKT::calc_crc16(uint8_t *data_stream, int data_len)
 {
     uint16_t generator = 0x1021;
     uint16_t crc = 0;
@@ -136,10 +270,40 @@ uint16_t calc_crc16(uint8_t *data_stream, int data_len)
         }
     }
 
+    printf("CRC Return: 0x%X\n", crc);
+
     return crc;
 }
 
-bool isLittleEndian(void)
+bool DISKPKT::valid_crc(int mode)
+{
+    uint16_t real_crc = 0;
+
+    switch (mode) {
+        case DECODE_PARAMS:
+            real_crc = calc_crc16((uint8_t*) &dparams, sizeof(struct dsk_params) - sizeof(uint16_t));
+            if (real_crc == (isLittleEndian()) ? swap_uint16(dparams.param_crc) : dparams.param_crc) {
+                printf("dparams CRC is good\n");
+                return true;
+            }
+            return false;
+            break;
+        case DECODE_SECS:
+            real_crc = calc_crc16((uint8_t*) &dsp, sizeof(struct dsk_sect_pkt) - sizeof(uint16_t));
+            if (real_crc == (isLittleEndian()) ? swap_uint16(dsp.packet_crc) : dsp.packet_crc) {
+                printf("dsp CRC is good\n");
+                return true;
+            }
+            return false;
+            break;
+        default:
+            fprintf(stderr, "Invalid Decoding mode parameter to DISKPKT::valid_crc: %d\n", mode);
+    }
+
+    return false;
+}
+
+bool DISKPKT::isLittleEndian(void)
 {
     uint16_t i = 1;
     uint8_t *c = (uint8_t*) &i;
