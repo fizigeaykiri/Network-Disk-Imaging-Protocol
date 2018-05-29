@@ -182,6 +182,7 @@ void DISKREAD::handle_error(uint8_t status, bool skippable)
                     valid_input = false;
             }
         } while(!valid_input);
+        printf("\n");
     }
 }
 

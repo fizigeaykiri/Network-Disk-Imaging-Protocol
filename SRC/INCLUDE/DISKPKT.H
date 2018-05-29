@@ -11,8 +11,6 @@
 #include <strings.h>
 
 
-#define SECTOR_SIZE 512
-
 #define PROTOCOL_VER 1
 
 #define DECODE_PARAMS   0

@@ -22,21 +22,22 @@
 class DISKREAD
 {
     public:
-    struct diskinfo_t query_disks(uint8_t disk_num);
-    int verify_mbr(int drive_num);
-    int query_mbr(int drive_num);
-    uint8_t* get_track(int disk_num, int track_num);
+        static struct diskinfo_t query_disks(uint8_t disk_num);
+        static int verify_mbr(int drive_num);
+        static int query_mbr(uint8_t *mbr_data, int drive_num);
+        static int get_track(uint8_t *track_data, int disk_num, int track_num);
 
     private:
-    struct diskinfo_t disk_params;
-    uint32_t total_sectors;
-    uint32_t cur_log_sector;
-    uint32_t total_bytes; 
-    int error_countdown;
+        static uint8_t sec_buffer[SECTOR_SIZE];
+        static struct diskinfo_t disk_params;
+        static uint32_t total_sectors;
+        static uint32_t cur_log_sector;
+        static uint32_t total_bytes; 
+        static int error_countdown;
     
-    void handle_error(uint8_t status, bool skippable);
-    void disk_error(uint8_t status);
-    void display_buffer(uint8_t *buffer, uint buffer_len);
+        static void handle_error(uint8_t status, bool skippable);
+        static void disk_error(uint8_t status);
+        static void display_buffer(uint8_t *buffer, uint buffer_len);
 }
 
 #endif
