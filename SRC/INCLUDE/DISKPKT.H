@@ -85,6 +85,8 @@ class DISKPKT
     uint16_t get_disk_parameter(int disk_param);
     uint16_t get_sector_loc(int disk_param);
 
+    void handle_status_error(uint8_t status_code);
+
     private:
     struct dsk_params dparams;
     struct dsk_sect_pkt dsp;

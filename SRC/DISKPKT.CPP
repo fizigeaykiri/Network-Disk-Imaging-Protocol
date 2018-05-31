@@ -314,3 +314,41 @@ bool DISKPKT::isLittleEndian(void)
     }
 }
 
+void DISKPKT::handle_status_error(uint8_t status_code)
+{
+    switch (status_code) {
+        case NDIP_CLIENT_SEND: NDIP_OK: NDIP_TRACK_COMPLETE: NDIP_HEAD_COMPLETE: NDIP_TRANS_COMPLETE:
+            break;
+        case NDIP_ERR_DISK_CHG:
+            fprintf(stderr, "Detected disk number change.\n");
+            break;
+        case NDIP_ERR_NAME_CHG:
+            fprintf(stderr, "Detected filename change.\n");
+            break;
+        case NDIP_ERR_DUP_SECT:
+            fprintf(stderr, "Duplicate sector data was sent again.\n");
+            break;
+        case NDIP_ERR_BAD_CRC:
+            fprintf(stderr, "Sent data had a bad CRC number.\n");
+            break;
+        case NDIP_ERR_OUT_RANGE:
+            fprintf(stderr, "Sent sector data was out of the range of disk geometry.\n");
+            break;
+        case NDIP_INCOMP_TRACK:
+            fprintf(stderr, "Data was sent on next track/cylinder before previous one finished.\n");
+            break;
+        case NDIP_INCOMP_HEAD:
+            fprintf(stderr, "Data was sent on next head before previous one finished.\n");
+            break;
+        case NDIP_NO_DISK_PARAM:
+            fprintf(stderr, "Disk parameters need to be sent to server before sector data.\n");
+            break;
+        case NDIP_ERR_OPEN_FILE:
+            fprintf(stderr, "Server couldn't open new image file for writing.\n");
+            break;
+        case NDIP_INVALID_PARAM:
+            fprintf(stderr, "Server received invalid disk parameters.\n");
+            break;
+        default:
+    }
+}

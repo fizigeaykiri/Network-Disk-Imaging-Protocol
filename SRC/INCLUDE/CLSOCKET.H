@@ -151,7 +151,7 @@ class CLSOCKET
         static uint16_t servPort = SERV_PORT;
         static uint16_t localPort = LCL_PORT;
         //static uint8_t sendBuffer[BUFFER_SIZE] = {0};
-        static uint8_t recvBuffer[BUFFER_SIZE] = {0};
+        //static uint8_t recvBuffer[BUFFER_SIZE] = {0};
 
         static TcpSocket *mySocket;
 

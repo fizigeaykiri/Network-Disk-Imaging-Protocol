@@ -107,18 +107,32 @@ int CLSOCKET::update_connection(void)
     return 0;
 }
 
-int8_t CLSOCKET::send_data(uint8_t *sendBuffer)
+int8_t CLSOCKET::send_data(uint8_t *sendBuffer, int char_count)
 {
     int8_t sendRc = mySocket->send(sendBuffer, char_count);
 
     return sendRc;
 }
 
-uint8_t* CLSOCKET::recv_data()
+int16_t CLSOCKET::recv_data(uint8_t *recvBuffer, int16_t recv_buffer_size)
 {
-    int16_t recvRc = mySocket->recv(recvBuffer, RECV_BUFFER_SIZE);
+    if (recvBuffer == NULL) {
+        fprintf(stderr, "Null Pointer passed into CLSOCKET::recv_data().\n");
+        return -1;
+    }
 
-    return recvBuffer;
+    //int16_t recvRc = mySocket->recv(recvBuffer, RECV_BUFFER_SIZE);
+    int16_t recvRc = mySocket->recv(recvBuffer, recv_buffer_size);
+
+    /*
+    if (recvRc > 0) {
+        return recvBuffer;
+    } else {
+        return NULL;
+    }
+    */
+
+    return recvRc;
 }
 
 void CLSOCKET::close_connection(void)
