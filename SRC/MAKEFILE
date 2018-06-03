@@ -1,5 +1,5 @@
 #
-# mTcpTstC makefile
+# NDIP makefile
 #
 #
 # Possible optimizations for 8088 class processors
@@ -26,6 +26,7 @@
 
 tcp_h_dir = TCPINC\
 tcp_c_dir = ..\TCPLIB\
+src_c_dir = .\
 common_h_dir = INCLUDE\
 
 memory_model = -mc
@@ -35,20 +36,25 @@ compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
 
 tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj
 objs = mtcptstc.obj
+ndipobjs = ndipcl.obj clsocket.obj diskpkt.obj diskread.obj 
 
-all : clean mtcptstc.exe
+all : clean ndipcl.exe
 
 clean : .symbolic
   @del mtcptstc.exe
+  @del ndipcl.exe
   @del *.obj
   @del *.map
 
 patch : .symbolic
-  ..\utils\patch mtcptstc.exe mtcptstc.map $(memory_model)
+#  ..\utils\patch mtcptstc.exe mtcptstc.map $(memory_model)
+  ..\utils\patch ndipcl.exe ndipcl.map $(memory_model)
 
 .asm : $(tcp_c_dir)
 
 .cpp : $(tcp_c_dir)
+
+#.cpp : $(src_c_dir)
 
 .asm.obj :
   wasm -0 $(memory_model) $[*
@@ -58,4 +64,7 @@ patch : .symbolic
 
 
 mtcptstc.exe: $(tcpobjs) $(objs)
+  wlink system dos option map option stack=4096 name $@ file *.obj
+
+ndipcl.exe: $(ndipobjs) $(tcpobjs) 
   wlink system dos option map option stack=4096 name $@ file *.obj

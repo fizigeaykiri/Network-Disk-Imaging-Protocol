@@ -3,13 +3,20 @@
  *  - Encodes data from the client with sockets using MTCP
  */
 
-#include "CLSOCKET.CPP"
+#include "CLSOCKET.H"
 
 extern volatile uint8_t CtrlBreakDetected;
 
 
+char CLSOCKET::servAddrName[80] = {0};
+uint16_t CLSOCKET::servPort = SERV_PORT;
+uint16_t CLSOCKET::localPort = LCL_PORT;
+TcpSocket* CLSOCKET::mySocket;
+
 int CLSOCKET::initialize(void)
 {
+    uint8_t foobar = 20;
+    
     // Setup mTCP environment
     if (Utils::parseEnv() != 0) {
         return -1;
@@ -39,21 +46,24 @@ int CLSOCKET::connect_server(char* nservAddrName)
 int CLSOCKET::connect_server(char* nservAddrName, uint16_t servPort)
 {
     IpAddr_t serverAddr;
+    int8_t rc;
 
     // Resolve this name and definitely send the request
-    int8_t rc2 = Dns::resolve(ServerAddrName, serverAddr, 1);
+    int8_t rc2 = Dns::resolve(nservAddrName, serverAddr, 1);
     if (rc2 < 0) {
         fprintf(stderr, "Error resolving server\n");
-        shutdown(-1);
+        shutdown();
         return -1;
     }
 
     uint8_t done = 0;
 
     while (!done) {
+        
         if (CtrlBreakDetected) {
             break;
         }
+        
 
         if (!Dns::isQueryPending()) {
             break;
@@ -66,10 +76,10 @@ int CLSOCKET::connect_server(char* nservAddrName, uint16_t servPort)
     }
 
     // Query is no longer pending or we bailed out of the loop.
-    rc2 = Dns::resolve(ServerAddrName, serverAddr, 0);
+    rc2 = Dns::resolve(nservAddrName, serverAddr, 0);
     if (rc2 != 0) {
         fprintf(stderr, "Error resolving server\n");
-        shutdown(-1);
+        shutdown();
         return -1;
     }
         
@@ -80,11 +90,11 @@ int CLSOCKET::connect_server(char* nservAddrName, uint16_t servPort)
         serverAddr[0], serverAddr[1], serverAddr[2], serverAddr[3]);
     
     // Non-blocking connect. Wait 10 seconds before giving up.
-    rc = mySocket->connect(LclPort, serverAddr, ServerPort, 10000);
+    rc = mySocket->connect(localPort, serverAddr, servPort, 10000);
 
     if (rc != 0) {
         fprintf(stderr, "Socket open failed, couldn't connect to server.\n");
-        shutdown(-1);
+        shutdown();
         return -1;
     }
 

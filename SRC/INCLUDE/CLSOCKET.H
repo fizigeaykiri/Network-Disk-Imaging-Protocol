@@ -6,9 +6,10 @@
 #ifndef _CLSOCKET_H_
 #define _CLSOCKET_H_
 
-#ifdef defined(_WIN32) || defined(__APPLE__) || defined(__linux__) || defined(__unix__)
-#error CLSOCKET class is designed to only be used with the client on a DOS target
-#endif
+// Watcom Compiler doesn't like this - figure out later
+//#ifdef defined(_WIN32) || defined(__APPLE__) || defined(__linux__) || defined(__unix__)
+//#error CLSOCKET class is designed to only be used with the client on a DOS target
+//#endif
 
 #include "NDIPTYPE.H"
 
@@ -142,14 +143,18 @@ class CLSOCKET
         static int connect_server(char* nservAddrName);
         static int connect_server(char* nservAddrName, uint16_t servPort);
         static int update_connection(void);
-        static int send_data(void);
-        static int recv_data(void);
+        static int8_t send_data(uint8_t *sendBuffer, int char_count);
+        static int16_t recv_data(uint8_t *recvBuffer, int16_t recv_buffer_size);
+        static void close_connection(void);
         static void shutdown(void);
 
     private:
         static char servAddrName[80];
-        static uint16_t servPort = SERV_PORT;
-        static uint16_t localPort = LCL_PORT;
+        //static char servAddrName[];
+        //static uint16_t servPort = SERV_PORT;
+        static uint16_t servPort;
+        //static uint16_t localPort = LCL_PORT;
+        static uint16_t localPort;
         //static uint8_t sendBuffer[BUFFER_SIZE] = {0};
         //static uint8_t recvBuffer[BUFFER_SIZE] = {0};
 
@@ -163,7 +168,8 @@ class CLSOCKET
         static void __interrupt __far ctrlBreakHandler();
         static void __interrupt __far ctrlCHandler();
         */
-}
+};
+
 
 
 #endif

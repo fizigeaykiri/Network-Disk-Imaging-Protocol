@@ -5,6 +5,13 @@
 
 #include "DISKREAD.H"
 
+uint8_t DISKREAD::sec_buffer[SECTOR_SIZE] = {0};
+struct diskinfo_t DISKREAD::disk_params;
+uint32_t DISKREAD::total_sectors = 0;
+uint32_t DISKREAD::cur_log_sector = 0;
+uint32_t DISKREAD::total_bytes = 0; 
+int DISKREAD::error_countdown = 0;
+
 struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 {
     //struct diskinfo_t *di = ;
@@ -28,7 +35,7 @@ struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 	disk_params.head = regs.h.dh + 1;
 	disk_params.drive = regs.h.dl;
 	
-    total_sectors = disk_params.head * di.track * disk_params.sector;
+    total_sectors = disk_params.head * disk_params.track * disk_params.sector;
     total_bytes = total_sectors * SECTOR_SIZE;
     
     printf("Drive parameters:\n");
@@ -42,7 +49,7 @@ struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 	return disk_params;
 }
 
-int DISKREAD::verify_mbr(uint8_t disk_num)
+int DISKREAD::verify_mbr(uint8_t drive_num)
 {
     struct diskinfo_t di;
     uint8_t status;
@@ -162,15 +169,18 @@ void DISKREAD::handle_error(uint8_t status, bool skippable)
             c = getchar();
 
             switch (c) {
-                case 'Y': 'y':
+                case 'Y': 
+                case 'y':
                     valid_input = true;
                     error_countdown = ERR_TIMER_START;
                     break;
-                case 'C': 'c':
+                case 'C': 
+                case 'c':
                     valid_input = true;
                     error_countdown = ERR_TIMER_CANCEL;
                     break;
-                case 'S': 's':
+                case 'S': 
+                case 's':
                     if (skippable) {
                         valid_input = true;
                         error_countdown = ERR_TIMER_SKIP;

@@ -4,11 +4,14 @@
  */
 
 #include <stdio.h>
+#include <strings.h>
+#include <memory.h>
 #include <bios.h>
 
 #include "NDIPTYPE.H"
 #include "CLSOCKET.H"
 #include "DISKREAD.H"
+#include "DISKPKT.H"
 
 // Trap Ctrl-Break and Ctrl-C to that we can unhook the timer interrupt
 //  and shutdown cleanly.
@@ -29,7 +32,7 @@ void __interrupt __far ctrlCHandler()
 }
 
 void usage(void);
-struct diskinfo_t get_disk(void);
+struct diskinfo_t* get_disk(void);
 int send_disk_params(DISKPKT *dParamPkt);
 int get_mbr(int disk_num, char *file_name);
 int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num);
@@ -38,7 +41,7 @@ void shutdown_client(void);
 
 int main(int argc, char *argv[])
 {
-    struct diskinfo_t dparams;
+    struct diskinfo_t *dparams;
     //int disk_num;
     int ret_code;
     char file_name[16];
@@ -54,6 +57,9 @@ int main(int argc, char *argv[])
 
     //disk_num = get_disk();
     dparams = get_disk();
+    if (dparams == NULL) {
+        return 1;
+    }
     /*
     if (disk_num == -1) {
         return 1;
@@ -65,10 +71,14 @@ int main(int argc, char *argv[])
     printf("Please enter the filename of the image: ");
     if (fgets(file_name, 16, stdin) == NULL) {
         fprintf(stderr, "Error processing filename.\n");
+        free(dparams);
+        dparams = NULL;
         return 1;
     }
     
     if (CLSOCKET::initialize() > 0) {
+        free(dparams);
+        dparams = NULL;
         return 1;
     }
 
@@ -76,26 +86,35 @@ int main(int argc, char *argv[])
 
     if (CLSOCKET::connect_server(argv[1]) != 0) {
         shutdown_client();
+        free(dparams);
+        dparams = NULL;
         return 1;    
     }
 
-    DISKPKT dParamPkt = new DISKPKT(file_name, NULL, di.drive, di.track, di.head, di.sector, 0);
+    DISKPKT *dParamPkt = new DISKPKT(file_name, NULL, dparams->drive, dparams->track, dparams->head, dparams->sector, 0);
     ret_code = send_disk_params(dParamPkt);
     if (ret_code >= 4) {
         delete dParamPkt;
         shutdown_client();
+        free(dparams);
+        dparams = NULL;
         return 1;
     }
 
     delete dParamPkt;
 
-    if (get_mbr(disk_num, file_name) != 0) {
+    if (get_mbr(dparams->drive, file_name) != 0) {
         shutdown_client();
+        free(dparams);
+        dparams = NULL;
         return 1;
     }
     
 
     shutdown_client();
+    
+    free(dparams);
+    dparams = NULL;
 
     return 0;
 }
@@ -106,31 +125,42 @@ void usage(void)
     printf("ndipcl <server IP address | server domain name>\n");
 }
 
-struct diskinfo_t get_disk(void)
+struct diskinfo_t* get_disk(void)
 {
     char c;
     char *c2 = "X";
     int8_t drive_num = 0;
-    struct diskinfo_t di = DISKREAD::query_disks(0);
-    if (di.drive == 0) {
+    //struct diskinfo_t di = DISKREAD::query_disks(0);
+    struct diskinfo_t *di = (struct diskinfo_t *) malloc(sizeof(struct diskinfo_t));
+    if (di == NULL) {
+        printf("Couldn't allocate enough memory to store the disk parameters.\n");
+        return NULL;
+    }
+    
+    memcpy(di, &DISKREAD::query_disks(0), sizeof(struct diskinfo_t));
+    
+    if (di->drive == 0) {
         printf("No hard drives were found. If your system has a hard drive, check and make\n");
         printf("sure your BIOS can access it through software interrupt 0x13h.\n");
         //return -1;
+        free(di);
+        di = NULL;
         return NULL;
     }
 
-    printf("%d hard drives were detected. Please select which hard drive you'd like to\n", di.drive);
-    printf("image. (1 through %d): ", di.drive);
+    printf("%d hard drives were detected. Please select which hard drive you'd like to\n", di->drive);
+    printf("image. (1 through %d): ", di->drive);
 
     do {
         c = getchar();
         c2[0] = c;
         drive_num = atoi(c2);
-    } while (drive_num <= 0 || drive_num > di.drive);
+    } while (drive_num <= 0 || drive_num > di->drive);
     
     drive_num--;
 
-    di = DISKREAD::query_disk(drive_num);
+    //di = DISKREAD::query_disk(drive_num);
+    memcpy(di, &DISKREAD::query_disks(drive_num), sizeof(struct diskinfo_t));
 
     printf("\nYour selected disk has the parameters above. Do you wish to proceed? (Y/N): ");
 
@@ -163,7 +193,7 @@ int send_disk_params(DISKPKT *dParamPkt)
     uint8_t status_code;
     uint8_t done = 0;
     uint8_t mode = 0;
-    uint8_t *recv_buffer = malloc(2000);
+    uint8_t *recv_buffer = (uint8_t *) malloc(2000);
     if (recv_buffer == NULL) {
         fprintf(stderr, "Couldn't allocate enough memory for receive buffer.\n");
         return -1;
@@ -175,7 +205,13 @@ int send_disk_params(DISKPKT *dParamPkt)
             done = 1;
             mode = 5;
         }
-
+    
+        if (CLSOCKET::update_connection() > 1) {
+            done = 1;
+            mode = 5;
+        }
+    
+        /*
         // Service the connection
         PACKET_PROCESS_SINGLE;
         Arp::driveArp();
@@ -185,6 +221,7 @@ int send_disk_params(DISKPKT *dParamPkt)
             done = 1;
             mode = 5;
         }
+        */
 
         // Get Status Code
         if (mode == 0 || mode == 2) {
@@ -206,10 +243,10 @@ int send_disk_params(DISKPKT *dParamPkt)
         // Send Disk Parameters
         if (mode == 2) {
             status_code = dParamPkt->get_status_code();
-            if (CLSOCKET::send_data(&status_code) < 1) {
+            if (CLSOCKET::send_data(&status_code, 1) < 1) {
                 fprintf(stderr, "Unable to send packet to server.\n");
             }
-            if (CLSOCKET::send_data(dParamPkt->get_raw_stream(DECODE_SECS)) < 1) {
+            if (CLSOCKET::send_data(dParamPkt->get_raw_stream(DECODE_SECS), sizeof(struct dsk_sect_pkt)) < 1) {
                 fprintf(stderr, "Unable to send packet to server.\n");
             } else {
                 mode = 3;
@@ -238,7 +275,7 @@ int send_disk_params(DISKPKT *dParamPkt)
 int get_mbr(int disk_num, char *file_name)
 {
     int ret_val;
-    uint8_t *mbr_data = malloc(SECTOR_SIZE);
+    uint8_t *mbr_data = (uint8_t *) malloc(SECTOR_SIZE);
     if (mbr_data == NULL) {
         fprintf(stderr, "Couldn't allocate memory to store MBR data. Try removing some TSRs.\n");
         return 1;
@@ -260,6 +297,7 @@ int get_mbr(int disk_num, char *file_name)
 
     free(mbr_data);
     mbr_data = NULL;
+    return 0;
 }
 
 int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
@@ -276,13 +314,13 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
         return 1;
     }
 
-    uint8_t *recv_buffer = malloc(2000);
+    uint8_t *recv_buffer = (uint8_t *) malloc(2000);
     if (recv_buffer == NULL) {
         fprintf(stderr, "Couldn't allocate enough memory for receiv buffer.\n");
         return 1;
     }
 
-    DISKPKT mbrPkt = new DISKPKT(file_name, mbr_data, disk_num, 0, 0, 1, 1);
+    DISKPKT *mbrPkt = new DISKPKT(file_name, mbr_data, disk_num, 0, 0, 1, 1);
     int done = 0;
     int mode = 0;
     uint8_t status_code;
@@ -294,6 +332,7 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
             mode = 4;
         }
 
+        /*
         // Service the connection
         PACKET_PROCESS_SINGLE;
         Arp::driveArp();
@@ -303,13 +342,19 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
             done = 1;
             mode = 4;
         }
+        */
+        
+        if (CLSOCKET::update_connection() > 1) {
+            done = 1;
+            mode = 5;
+        }
 
         if (mode == 0) {
             status_code = mbrPkt->get_status_code();
-            if (CLSOCKET::send_data(&status_code) < 1) {
+            if (CLSOCKET::send_data(&status_code, 1) < 1) {
                 fprintf(stderr, "Unable to send packet to server.\n");
             }
-            if (CLSOCKET::send_data(mbrPkt->get_raw_stream(DECODE_SECS)) < 1) {
+            if (CLSOCKET::send_data(mbrPkt->get_raw_stream(DECODE_SECS), sizeof(struct dsk_sect_pkt)) < 1) {
                 fprintf(stderr, "Unable to send packet to server.\n");
             } else {
                 mode = 1;
@@ -323,7 +368,8 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
 
                 if (status_code > NDIP_OK) {
                     fprintf(stderr, "Error from server: ");
-                    dParamPkt->handle_status_error(status_code);
+                    //dParamPkt->handle_status_error(status_code);
+                    mbrPkt->handle_status_error(status_code);
                     mode = 3;
                     done = 1;
                 } else {
@@ -359,6 +405,6 @@ void setup_interrupts(void)
 void shutdown_client(void)
 {
     CLSOCKET::shutdown();
-    setvect(0x1B, oldCtrlBreakhandler);
+    setvect(0x1B, oldCtrlBreakHandler);
 }
 

@@ -9,6 +9,7 @@
 #include "NDIPTYPE.H"
 #include <stdio.h>
 #include <strings.h>
+#include <memory.h>
 
 
 #define PROTOCOL_VER 1
@@ -92,6 +93,7 @@ class DISKPKT
     struct dsk_params dparams;
     struct dsk_sect_pkt dsp;
     uint8_t status_code;
+    int8_t padding;
     
     //unsigned int calculate_checksum(char * data_stream);
     uint16_t calc_crc16(uint8_t *data_stream, int data_len);
