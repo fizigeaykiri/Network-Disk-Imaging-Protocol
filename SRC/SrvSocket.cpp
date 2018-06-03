@@ -5,6 +5,11 @@
 
 #include "SrvSocket.h"
 
+int SrvSocket::server_fd = 0;
+int SrvSocket::new_socket = 0;
+int SrvSocket::addrlen = 0;
+struct sockaddr_in SrvSocket::address;
+
 int SrvSocket::initialize(void)
 {
     //int server_fd, new_socket, valread;

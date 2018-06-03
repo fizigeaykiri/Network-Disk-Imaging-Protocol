@@ -8,6 +8,11 @@
 #include "DISKPKT.H"
 #include "SrvSocket.h"
 
+int setup(void);
+int get_parameters(struct dsk_sect_pkt *dparams);
+int get_mbr(struct dsk_sect_pkt *dparams);
+void display_buffer(uint8_t *buffer, size_t buffer_len);
+
 uint8_t mbr[SECTOR_SIZE] = {0};
 
 int main(int argc, char *argv[])
@@ -31,10 +36,12 @@ int main(int argc, char *argv[])
     printf("Disk MBR:\n");
     display_buffer(mbr, SECTOR_SIZE);
 
+    SrvSocket::shutdown();
+
     return 0;
 }
 
-int setup()
+int setup(void)
 {
     if (SrvSocket::initialize() > 0) {
         return 1;
@@ -47,10 +54,10 @@ int setup()
     return 0;
 }
 
-int get_parameters(struct dsk_params *dparams)
+int get_parameters(struct dsk_sect_pkt *dparams)
 {
     // set status code
-    uint8_t *recv_buffer = malloc(2000);
+    uint8_t *recv_buffer = (uint8_t *) malloc(2000);
     int mode = 0;
     uint8_t status_code = NDIP_OK;
     
@@ -87,18 +94,19 @@ int get_parameters(struct dsk_params *dparams)
         if (mode == 2) {
             if (SrvSocket::recv_data(recv_buffer, 2000) > 0) {
                 DISKPKT *dpkt = new DISKPKT(recv_buffer, DECODE_SECS);
-                //Todo: check items
-                if (dpkt->get_status_code() == NDIP_OK) {
-                    *dparams = dpkt->get_sector_struct();
+                status_code = dpkt->get_status_code();
+                if (status_code == NDIP_OK) {
+                    //*dparams = dpkt->get_sector_struct();
+                    memcpy(dparams, dpkt->get_sector_struct(), sizeof(struct dsk_sect_pkt));
                 } else {
-                    fprintf(stderr, "An error occurred receiving the data from the client: %0X\n", dpkt->get_status_code());
+                    fprintf(stderr, "An error occurred receiving the data from the client: %0X\n", status_code);
                     delete dpkt;
                     free(recv_buffer);
                     recv_buffer = NULL;
                     return 1;
                 }
                 // Send Status Code
-                if (SrvSocket::send_data(&(dpkt->get_status_code()), 1) <= 0) {
+                if (SrvSocket::send_data(&status_code, 1) <= 0) {
                     fprintf(stderr, "Failed to send packet\n");
                 } else {
                     mode = 3;
@@ -117,7 +125,7 @@ int get_parameters(struct dsk_params *dparams)
 
 int get_mbr(struct dsk_sect_pkt *dparams)
 {
-    uint8_t *recv_buffer = malloc(2000);
+    uint8_t *recv_buffer = (uint8_t *) malloc(2000);
     int mode = 0;
     uint8_t status_code = NDIP_OK;
 
@@ -143,8 +151,8 @@ int get_mbr(struct dsk_sect_pkt *dparams)
         if (mode == 1) {
             if (SrvSocket::recv_data(recv_buffer, 2000) > 0) {
                 DISKPKT *dpkt = new DISKPKT(recv_buffer, DECODE_SECS);
-                
-                if (dpkt->get_status_code() == NDIP_OK) {
+                status_code = dpkt->get_status_code();
+                if (status_code == NDIP_OK) {
                     if (strcmp(dparams->file_name, dpkt->get_filename()) != 0) {
                         dpkt->set_status_code(NDIP_ERR_NAME_CHG);
                     } else if (dparams->disk_num != dpkt->get_sector_loc(DISK_PARAM_DISK_NUM)) {
@@ -159,24 +167,24 @@ int get_mbr(struct dsk_sect_pkt *dparams)
                         }
                     }
                 } else {
-                    fprintf(stderr, "An error occurred receiving the data from the client: %0X\n", dpkt->get_status_code());
+                    fprintf(stderr, "An error occurred receiving the data from the client: %0X\n", status_code);
                     delete dpkt;
                     free(recv_buffer);
                     recv_buffer = NULL;
                     return 1;
                 }
                 // Send Status Code
-                if (dpkt->get_status_code() != NDIP_OK) {
-                    dpkt->handle_status_error(dpkt->get_status_code());
+                if (status_code != NDIP_OK) {
+                    dpkt->handle_status_error(status_code);
                 }
-                if (SrvSocket::send_data(&(dpkt->get_status_code()), 1) <= 0) {
+                if (SrvSocket::send_data(&status_code, 1) <= 0) {
                     fprintf(stderr, "Failed to send packet\n");
                 } else {
                     memcpy(mbr, dpkt->get_sector_data(), SECTOR_SIZE);
                     mode = 2;
                 }
 
-                delete *dpkt;
+                delete dpkt;
             }
         }
 
@@ -185,7 +193,7 @@ int get_mbr(struct dsk_sect_pkt *dparams)
 
     
     free(recv_buffer);
-    recv_buffer = NULL
+    recv_buffer = NULL;
     return 0;
 }
 

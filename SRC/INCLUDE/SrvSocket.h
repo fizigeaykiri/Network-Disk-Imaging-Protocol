@@ -34,7 +34,9 @@ class SrvSocket
         static int new_socket;
         static int addrlen;
         static struct sockaddr_in address;
-}
+
+        SrvSocket(void);
+};
 
 #endif
 

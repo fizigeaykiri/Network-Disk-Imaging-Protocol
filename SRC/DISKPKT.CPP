@@ -232,9 +232,9 @@ uint16_t DISKPKT::get_sector_loc(int disk_param)
     return 0xFFFF;
 }
 
-struct dsk_sect_pkt DISKPKT::get_sector_struct(void)
+struct dsk_sect_pkt *DISKPKT::get_sector_struct(void)
 {
-    return dsp;
+    return &dsp;
 }
 
 /*
@@ -321,7 +321,11 @@ bool DISKPKT::isLittleEndian(void)
 void DISKPKT::handle_status_error(uint8_t status_code)
 {
     switch (status_code) {
-        case NDIP_CLIENT_SEND: NDIP_OK: NDIP_TRACK_COMPLETE: NDIP_HEAD_COMPLETE: NDIP_TRANS_COMPLETE:
+        case NDIP_CLIENT_SEND: 
+        case NDIP_OK: 
+        case NDIP_TRACK_COMPLETE: 
+        case NDIP_HEAD_COMPLETE: 
+        case NDIP_TRANS_COMPLETE:
             break;
         case NDIP_ERR_DISK_CHG:
             fprintf(stderr, "Detected disk number change.\n");
@@ -354,5 +358,6 @@ void DISKPKT::handle_status_error(uint8_t status_code)
             fprintf(stderr, "Server received invalid disk parameters.\n");
             break;
         default:
+            return;
     }
 }
