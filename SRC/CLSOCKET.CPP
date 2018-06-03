@@ -51,7 +51,9 @@ int CLSOCKET::connect_server(char* nservAddrName, uint16_t servPort)
     uint8_t done = 0;
 
     while (!done) {
-        //TODO: Add Interrupt
+        if (CtrlBreakDetected) {
+            break;
+        }
 
         if (!Dns::isQueryPending()) {
             break;

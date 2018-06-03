@@ -232,6 +232,10 @@ uint16_t DISKPKT::get_sector_loc(int disk_param)
     return 0xFFFF;
 }
 
+struct dsk_sect_pkt DISKPKT::get_sector_struct(void)
+{
+    return dsp;
+}
 
 /*
 unsigned int calculate_checksum(dsk_sect_pkt *dsp)   // experimental CRC
