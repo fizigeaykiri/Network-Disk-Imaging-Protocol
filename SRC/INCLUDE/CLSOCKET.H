@@ -29,7 +29,7 @@
 #include "dns.h"
 #include "tcp.h"
 #include "tcpsockm.h"
-
+/*
 #include "GLOBAL.CFG"
 
 // Tracing support
@@ -128,7 +128,7 @@
 #define DNS_TIMEOUT              (10000ul)   // 10 seconds
 
 #endif
-
+*/
 // End of MTCP Stuff
 
 #define BUFFER_SIZE     1500

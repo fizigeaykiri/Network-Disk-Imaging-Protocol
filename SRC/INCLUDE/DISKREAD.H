@@ -34,14 +34,16 @@ class DISKREAD
         static uint8_t sec_buffer[SECTOR_SIZE];
         //static uint8_t sec_buffer[];
         static struct diskinfo_t disk_params;
-        static uint32_t total_sectors;
-        static uint32_t cur_log_sector;
-        static uint32_t total_bytes; 
+        static uint64_t total_sectors;
+        static uint64_t cur_log_sector;
+        static uint64_t total_bytes; 
         static int error_countdown;
     
-        static void handle_error(uint8_t status, bool skippable);
-        static void disk_error(uint8_t status);
-        //static void display_buffer(uint8_t *buffer, uint buffer_len);
+        static void handle_error(uint16_t status, bool skippable);
+        static void disk_error(uint16_t status);
+        static void display_buffer(uint8_t *buffer, uint16_t buffer_len);
+        static uint16_t bios_disk_2(uint8_t cmd, uint8_t drive, uint8_t head, uint16_t track, uint8_t sector, 
+                                    uint8_t nsectors, void *buffer);
 };
 
 #endif

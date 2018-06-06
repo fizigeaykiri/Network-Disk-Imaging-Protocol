@@ -31,12 +31,14 @@ common_h_dir = INCLUDE\
 
 memory_model = -mc
 compile_options = -0 $(memory_model) -DCFG_H="MTCPTSTC.H" -oh -os -s -zp2 -zpw -we
+#compile_options = -0 -DCFG_H="MTCPTSTC.H"
 compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
 
 
 tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj
 objs = mtcptstc.obj
 ndipobjs = ndipcl.obj clsocket.obj diskpkt.obj diskread.obj 
+testobjs = tests.obj diskpkt.obj diskread.obj
 
 all : clean ndipcl.exe
 
@@ -68,3 +70,7 @@ mtcptstc.exe: $(tcpobjs) $(objs)
 
 ndipcl.exe: $(ndipobjs) $(tcpobjs) 
   wlink system dos option map option stack=4096 name $@ file *.obj
+
+tests.exe: $(testobjs)
+    wlink system dos option map option stack=4096 name $@ file *.obj
+    

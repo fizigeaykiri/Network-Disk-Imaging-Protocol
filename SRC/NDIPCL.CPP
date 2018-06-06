@@ -102,9 +102,9 @@ int main(int argc, char *argv[])
     }
 
     delete dParamPkt;
-
+    
     if (get_mbr(dparams->drive, file_name) != 0) {
-        shutdown_client();
+        //shutdown_client();
         free(dparams);
         dparams = NULL;
         return 1;
@@ -148,7 +148,7 @@ struct diskinfo_t* get_disk(void)
         return NULL;
     }
 
-    printf("%d hard drives were detected. Please select which hard drive you'd like to\n", di->drive);
+    printf("%d hard drive(s) were detected. Please select which hard drive you'd like to\n", di->drive);
     printf("image. (1 through %d): ", di->drive);
 
     do {
@@ -199,13 +199,15 @@ int send_disk_params(DISKPKT *dParamPkt)
         return -1;
     }
 
+    printf("send_disk_params()\n");
+    
     while (!done) {
         if (CtrlBreakDetected) {
             printf("\nCtrl-Break detected\n");
             done = 1;
             mode = 5;
         }
-    
+        
         if (CLSOCKET::update_connection() > 1) {
             done = 1;
             mode = 5;
@@ -227,6 +229,7 @@ int send_disk_params(DISKPKT *dParamPkt)
         if (mode == 0 || mode == 2) {
             int16_t recvRc = CLSOCKET::recv_data(recv_buffer, 2000);
             if (recvRc > 0) {
+                printf("Got data from server. Checking for Status Code.\n");
                 status_code = recv_buffer[0];
 
                 if (status_code > NDIP_OK) {
@@ -241,7 +244,8 @@ int send_disk_params(DISKPKT *dParamPkt)
         }
 
         // Send Disk Parameters
-        if (mode == 2) {
+        if (mode == 1) {
+            printf("Sending new status code and disk parameters.\n");
             status_code = dParamPkt->get_status_code();
             if (CLSOCKET::send_data(&status_code, 1) < 1) {
                 fprintf(stderr, "Unable to send packet to server.\n");
@@ -254,6 +258,7 @@ int send_disk_params(DISKPKT *dParamPkt)
         }
 
         if (mode == 3) {
+            printf("Done sending disk params\n");
             done = 1;
         }
 
@@ -272,6 +277,7 @@ int send_disk_params(DISKPKT *dParamPkt)
     return mode;
 }
 
+
 int get_mbr(int disk_num, char *file_name)
 {
     int ret_val;
@@ -280,6 +286,9 @@ int get_mbr(int disk_num, char *file_name)
         fprintf(stderr, "Couldn't allocate memory to store MBR data. Try removing some TSRs.\n");
         return 1;
     }
+    memset(mbr_data, 0, SECTOR_SIZE);
+    
+    printf("get_mbr()\n");
 
     if (DISKREAD::verify_mbr(disk_num) != 0) {
         free(mbr_data);
@@ -320,6 +329,8 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
         return 1;
     }
 
+    printf("send_mbr()\n");
+    
     DISKPKT *mbrPkt = new DISKPKT(file_name, mbr_data, disk_num, 0, 0, 1, 1);
     int done = 0;
     int mode = 0;
@@ -350,6 +361,7 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
         }
 
         if (mode == 0) {
+            printf("Sending status code and mbr data to server.\n");
             status_code = mbrPkt->get_status_code();
             if (CLSOCKET::send_data(&status_code, 1) < 1) {
                 fprintf(stderr, "Unable to send packet to server.\n");
@@ -361,9 +373,11 @@ int send_mbr(uint8_t *mbr_data, char *file_name, int disk_num)
             }
         }
 
-        if (mode == 1) {
+        if (mode == 1) {            
             int16_t recvRc = CLSOCKET::recv_data(recv_buffer, 2000);
             if (recvRc > 0) {
+                printf("Retrieving status code from server.\n");
+                
                 status_code = recv_buffer[0];
 
                 if (status_code > NDIP_OK) {

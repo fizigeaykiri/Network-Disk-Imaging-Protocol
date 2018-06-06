@@ -7,9 +7,9 @@
 
 uint8_t DISKREAD::sec_buffer[SECTOR_SIZE] = {0};
 struct diskinfo_t DISKREAD::disk_params;
-uint32_t DISKREAD::total_sectors = 0;
-uint32_t DISKREAD::cur_log_sector = 0;
-uint32_t DISKREAD::total_bytes = 0; 
+uint64_t DISKREAD::total_sectors = 0;
+uint64_t DISKREAD::cur_log_sector = 0;
+uint64_t DISKREAD::total_bytes = 0; 
 int DISKREAD::error_countdown = 0;
 
 struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
@@ -21,7 +21,8 @@ struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
     //uint32_t total_sectors;
 
     regs.h.ah = 0x08;
-    regs.h.dl = 0x80 | disk_num;
+    //regs.h.dl = 0x80 | disk_num;
+    regs.h.dl = disk_num;
 
     // Set the segment and index to gaurd against BIOS bugs
     regs.w.di = 0x0000;
@@ -35,10 +36,10 @@ struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 	disk_params.head = regs.h.dh + 1;
 	disk_params.drive = regs.h.dl;
 	
-    total_sectors = disk_params.head * disk_params.track * disk_params.sector;
+    total_sectors = (uint64_t) (disk_params.head) * disk_params.track * disk_params.sector;
     total_bytes = total_sectors * SECTOR_SIZE;
     
-    printf("Drive parameters:\n");
+    printf("Drive %d parameters:\n", disk_num);
     printf("Number of Drives: %d\n", disk_params.drive);
 	printf("Number of Heads: %d\n", disk_params.head);
 	printf("Number of Cylinders: %d\n", disk_params.track);
@@ -57,6 +58,7 @@ int DISKREAD::verify_mbr(uint8_t drive_num)
     // Reset disks
 	di.drive = 0x80 | drive_num;
     error_countdown = ERR_TIMER_START;
+    printf("Resetting disk\n");
 	do {
         status = _bios_disk(_DISK_RESET, &di) >> 8;
         if (status > 0) {
@@ -81,6 +83,7 @@ int DISKREAD::verify_mbr(uint8_t drive_num)
     di.buffer = NULL;
     
     error_countdown = ERR_TIMER_START;
+    printf("Verifying MBR\n");
     do {
         status = _bios_disk(_DISK_VERIFY, &di) >> 8;
         if (status > 0) {
@@ -105,6 +108,7 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
 {
     struct diskinfo_t di;
     uint8_t status = 0;
+    uint8_t fake_buf[1024] = {0};
 
     if (mbr_data == NULL) {
         fprintf(stderr, "*mbr_data must be allocated before DISKREAD::query_mbr() is called\n");
@@ -113,27 +117,33 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
 
     // Reset Disks
     di.drive = 0x80 | drive_num;
+    //di.drive = drive_num;
     error_countdown = ERR_TIMER_START;
+    printf("Resetting disk\n");
 	do {
         status = _bios_disk(_DISK_RESET, &di) >> 8;
         if (status > 0) {
-            handle_error(status, false);
+            handle_error(status, true);
             if (error_countdown == ERR_TIMER_CANCEL) {
                 return -1;
             }
         }
-    } while (status > 0);
+    } while (status > 0 && error_countdown != ERR_TIMER_SKIP);
 
     di.drive = 0x80 | drive_num;
+    //di.drive = drive_num;
 	//di.drive = 0;
-	di.head = di.track = 0;
+	di.head = 0;
+    di.track = 0;
 	di.sector = 1;
 	di.nsectors = 1;
 	di.buffer = mbr_data;
 
     error_countdown = ERR_TIMER_START;
+    printf("Getting MBR\n");
     do {
         status = _bios_disk(_DISK_READ, &di) >> 8;
+        //status = bios_disk_2(_DISK_READ, di.drive, di.head, di.track, di.sector, di.nsectors, fake_buf);
         if (status > 0) {
             handle_error(status, false);
             if (error_countdown == ERR_TIMER_CANCEL) {
@@ -142,16 +152,23 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
         }
     } while (status > 0);
 
+    display_buffer(mbr_data, SECTOR_SIZE);
+    
     // Check MBR Signature
-    if ((uint16_t) mbr_data[SECTOR_SIZE-2] != 0xAA55) {
-        fprintf(stderr, "Couldn't find boot signature 0xAA55 in MBR.\n");
+    //if ((uint16_t) mbr_data[SECTOR_SIZE-2] != 0xAA55) {
+    //if ((uint16_t) mbr_data[SECTOR_SIZE-1] << 8 | mbr_data[SECTOR_SIZE-2] != (uint16_t) 0xAA55) {
+    if (mbr_data[SECTOR_SIZE-2] != 0x55 || mbr_data[SECTOR_SIZE-1] != 0xAA) {
+        //fprintf(stderr, "Couldn't find boot signature 0xAA55 in MBR. Found: %0X\n", (uint16_t) mbr_data[SECTOR_SIZE-2]);
+        //fprintf(stderr, "Couldn't find boot signature 0xAA55 in MBR. Found: %0X\n", 
+        //    (uint16_t) mbr_data[SECTOR_SIZE-1] << 8 | mbr_data[SECTOR_SIZE-2]);
+        fprintf(stderr, "Couldn't find boot signature 0xAA55 in MBR. Found: %0X%0X\n", mbr_data[SECTOR_SIZE-1], mbr_data[SECTOR_SIZE-2]);
         return -3;
     }
 
     return 0;
 }
 
-void DISKREAD::handle_error(uint8_t status, bool skippable)
+void DISKREAD::handle_error(uint16_t status, bool skippable)
 {
     char c;
     bool valid_input = false;
@@ -196,7 +213,7 @@ void DISKREAD::handle_error(uint8_t status, bool skippable)
     }
 }
 
-void DISKREAD::disk_error(uint8_t status)
+void DISKREAD::disk_error(uint16_t status)
 {
     fprintf(stderr, "Error 0x%02X: ", status);
     
@@ -306,4 +323,77 @@ void DISKREAD::disk_error(uint8_t status)
 		default:
 			fprintf(stderr, "Unknown error\n");
 	}
+}
+
+void DISKREAD::display_buffer(unsigned char *disk_buffer, uint16_t buffer_len)
+{
+	int i = 0;
+	int j = 0;
+	
+	for (i = 0; i < buffer_len; i++) {
+		printf("%02X ", disk_buffer[i]);
+		j += 3;
+		
+		if (j >= 78) {
+			j = 0;
+			printf("\n");
+		}
+	}
+    printf("\n");
+}
+
+uint16_t DISKREAD::bios_disk_2(uint8_t cmd, uint8_t drive, uint8_t head, uint16_t track, uint8_t sector, 
+                                uint8_t nsectors, void *buffer)
+{
+    uint16_t i, err;
+    struct SREGS sregs;
+    union REGS regs;
+    
+    sregs.es = FP_SEG(buffer);
+    regs.h.dh = head;
+    regs.h.dl = drive;
+    regs.h.ch = track;
+    regs.h.cl = ((track >> 2) & 0xC0) | sector;
+    regs.x.bx = FP_OFF(buffer);
+    
+    for (i = 0; i < 3; i++) {
+        switch (cmd) {
+            case _DISK_RESET:
+                regs.h.ah = 0x00;
+                break;
+            case _DISK_STATUS:
+                regs.h.ah = 0x01;
+                break;
+            case _DISK_READ:
+                regs.h.ah = 0x02;
+                break;
+            case _DISK_WRITE:
+                regs.h.ah = 0x03;
+                break;
+            case _DISK_VERIFY:
+                regs.h.ah = 0x04;
+                break;
+            case _DISK_FORMAT:
+                regs.h.ah = 0x05;
+                break;
+            default:
+                return 1;   // Invalid Command
+        }
+        
+        regs.h.al = nsectors;
+        
+        int86x(0x13, &regs, &regs, &sregs);
+        
+        err = regs.h.ah;
+        
+        if (err == 0) {
+            return 0;
+        }
+        
+        // Reset Disk and Try again
+        regs.h.al = 0;
+        int86x(0x13, &regs, &regs, &sregs);
+    }
+    
+    return err;
 }
