@@ -13,6 +13,9 @@
 
 #include "NDIPTYPE.H"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <memory.h>
 #include <bios.h>
 #include <i86.h>
 
@@ -35,7 +38,7 @@ class DISKREAD
         static struct diskinfo_t query_disks(uint8_t disk_num);
         static int verify_mbr(uint8_t drive_num);
         static int query_mbr(uint8_t *mbr_data, int drive_num);
-        static int get_track(uint8_t *track_data, int disk_num, int head_num, int track_num);
+        static int get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t track_num);
         static int save_err_map(char *filename);
 
     private:

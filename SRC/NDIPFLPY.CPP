@@ -4,15 +4,18 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <memory.h>
 
 #include "NDIPTYPE.H"
 #include "DISKREAD.H"
 
 struct diskinfo_t* get_disk(void);
 int get_mbr(int disk_num);
-int save_mbr(uint8_t *mbr_data);
-int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_in_chunk);
+//int save_mbr(uint8_t *mbr_data);
+int save_mbr(unsigned char *mbr_data);
+int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_per_chunk);
 
 int num_disk_errors = 0;
 char file_path[256] = {0};
@@ -23,8 +26,10 @@ int main(int argc, char *argv[])
 {
     struct diskinfo_t *dparams;
     int ret_code;
-    uint32_t chunk_size = 0;
-    uint sectors_per_chunk = 0;
+    uint16_t chunk_size = 0;
+    //unsigned long chunk_size = 0;
+    uint32_t sectors_per_chunk = 0;
+    //unsigned int sectors_per_chunk = 0;
 
     printf("NDIPFLPY - NDIP (Network Disk Imaging Protocol) to Floppy\n");
     printf(" - Saves Disk Image to multiple file chunks on other disks\n");
@@ -32,10 +37,13 @@ int main(int argc, char *argv[])
     printf("https://github.com/marssaturn91/Network-Disk-Imaging-Protocol\n\n");
 
     dparams = get_disk();
+    //struct diskinfo_t dparams = DISKREAD::query_disks(0);    
     if (dparams == NULL) {
         return 1;
     }
+    
 
+    
     printf("Enter drive and path for the new disk image file.\n");
     printf("Note: If you specify a drive other than A or B, it must store the entire image.\n");
     printf(">");
@@ -53,12 +61,16 @@ int main(int argc, char *argv[])
             printf(">");
         }
 
-        if (strlen(file_path) == 0) {
+        //if (strlen(file_path) == 0) {
+        if (strcmp(file_path, "\n") == 0) {
             printf("You need to enter a file path. Try again.\n");
             printf(">");
         }
-    } while (strlen(file_path) == 0 || file_path[1] != ':');
+    //} while (strlen(file_path) == 0 || file_path[1] != ':');
+    } while (strcmp(file_path, "\n") == 0 || file_path[1] != ':');
 
+    strtok(file_path, "\n");
+    
     if (file_path[2] == '\0') {
         file_path[2] = '\\';
     }
@@ -74,32 +86,50 @@ int main(int argc, char *argv[])
             dparams = NULL;
             return 1;
         }
+        
 
         if (strchr(file_name, '.') > 0) {
             printf("You can't include the extension in the file. Try again.\n");
             printf(">");
         }
 
-        if (strlen(file_name) == 0) {
+        //if (strlen(file_name) == 0) {
+        if (strcmp(file_name, "\n") == 0) {
             printf("You need to enter a filename. Try again.\n");
             printf(">");
         }
-    } while (strlen(file_name) == 0 || strchr(file_name, '.' > 0));
+    //} while (strlen(file_name) == 0 || strchr(file_name, '.' > 0));
+    } while (strcmp(file_name, "\n") == 0 || strchr(file_name, '.' > 0));
 
+    strtok(file_name, "\n");
+    fseek(stdin, 0, SEEK_END);
+    
     if (file_path[0] == 'a' || file_path[0] == 'A' || file_path[0] == 'b' || file_path[0] == 'B') {
         do {
-            printf("Disk Sector Size is %d bytes. Please enter the size of the chunks in kilobytes.\n", SECTOR_SIZE);
-            fscanf(stdin, ">%l\n", chunk_size);
+            printf("Disk Sector Size is %d bytes. Please enter the size of the chunks in kilobytes.>", SECTOR_SIZE);
+            scanf("%d", &chunk_size);
 
         } while (chunk_size <= 0);
 
-        sectors_per_chunk = (chunk_size * 1024) / SECTOR_SIZE;
+        printf("Entered %d\n", chunk_size);
+        
+        uint32_t chunk_size_bytes = chunk_size;
+        
+        //sectors_per_chunk = (chunk_size * 1024) / SECTOR_SIZE;
+        sectors_per_chunk = chunk_size;
+        printf("%lu\n", chunk_size_bytes);
+        chunk_size_bytes *= 1024;
+        //chunk_size_bytes = chunk_size * 1024;
+        printf("%lu\n", chunk_size_bytes);
+        sectors_per_chunk = chunk_size_bytes / SECTOR_SIZE;
 
-        printf("%l bytes chunk size with %d byte sized sectors mean %d sectors per chunk.\n", chunk_size * 1024, SECTOR_SIZE, sectors_per_chunk);
+        printf("%lu bytes chunk size with %d byte sized sectors mean %d sectors per chunk.\n", chunk_size_bytes, SECTOR_SIZE, sectors_per_chunk);
     }
+    
     // TODO: Verify the chunk size will fit on the disk
 
-    if (get_mbr(dparams->disk) > 1) {
+    if (get_mbr(dparams->drive) > 1) {
+    //if (get_mbr(0) > 1) {
         free(dparams);
         dparams = NULL;
         return 1;
@@ -107,6 +137,7 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
 
 struct diskinfo_t* get_disk(void)
 {
@@ -153,14 +184,22 @@ struct diskinfo_t* get_disk(void)
         }
     } while (c != 'y' && c != 'Y');
     printf("\n");
+    fseek(stdin, 0, SEEK_END);
 
+    // Missing this was cause of the Invalid Command Error, O_o
+    di->drive = drive_num;
+    
+    printf("Using disk %d\n", di->drive);
+    
     return di;
 }
+
 
 int get_mbr(int disk_num)
 {
     int ret_val;
     uint8_t *mbr_data = (uint8_t *) malloc(SECTOR_SIZE);
+    //unsigned char *mbr_data = (unsigned char*) malloc(SECTOR_SIZE);
     if (mbr_data == NULL) {
         fprintf(stderr, "Couldn't allocate memory to store MBR data. Try freeing up TSRs.\n");
         return 1;
@@ -195,6 +234,7 @@ int get_mbr(int disk_num)
 }
 
 int save_mbr(uint8_t *mbr_data)
+//int save_mbr(unsigned char *mbr_data)
 {
     char full_filename[12] = {0};
     FILE *mbr_ptr;
@@ -203,7 +243,8 @@ int save_mbr(uint8_t *mbr_data)
         return 1;
     }
 
-    strcpy(full_filename, file_name, strlen(file_name));
+    //strcpy(full_filename, file_name, strlen(file_name));
+    strcpy(full_filename, file_name);
     strcat(full_filename, ".MBR");
 
     mbr_ptr = fopen(full_filename, "wb");
@@ -212,7 +253,7 @@ int save_mbr(uint8_t *mbr_data)
         return 1;
     }
 
-    if (fwrite(mbr_data, SECTOR_SIZE, 1, mbr_ptr) < SECTOR_SIZE) {
+    if (fwrite(mbr_data, sizeof(unsigned char), SECTOR_SIZE, mbr_ptr) < SECTOR_SIZE) {
         fprintf(stderr, "Couldn't write all of the data to file %s.\n", full_filename);
         fclose(mbr_ptr);
         return 1;
@@ -223,7 +264,7 @@ int save_mbr(uint8_t *mbr_data)
     return 0;
 }
 
-int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_in_chunk)
+int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_per_chunk)
 {
     if (dparams == NULL) {
         fprintf(stderr, "read_disk() was called with null-pointer in dparams.\n");
@@ -240,7 +281,8 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
         return 1;
     }
 
-    uint8_t *track_buffer = malloc(SECTOR_SIZE * (dparams->sector + 1));
+    uint8_t *track_buffer = (uint8_t*) malloc(SECTOR_SIZE * (dparams->sector + 1));
+    //unsigned char *track_buffer = (unsigned char *) malloc(SECTOR_SIZE * (dparams->sector + 1));
     if (track_buffer == NULL) {
         fprintf(stderr, "Couldn't allocate enough memory for track buffer. Try removing TSRs.\n");
         return 1;
@@ -261,14 +303,14 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
     ext_loc = strlen(full_filename);
 
     if (sectors_per_chunk > 0) {
-        strcat(full_filename, '.000');
+        strcat(full_filename, ".000");
     } else {
-        strcat(full_filename, '.IMG');
+        strcat(full_filename, ".IMG");
     }
 
     for (int t = 0; t < dparams->track; t++) {
         for (int h = 0; h < dparams->head; h++) {
-            if (DISKREAD::get_track(track_buffer, dparams->disk, h, t) != 0) {
+            if (DISKREAD::get_track(track_buffer, dparams->drive, h, t) != 0) {
                 free(track_buffer);
                 track_buffer = NULL;
                 return 1;
@@ -298,14 +340,20 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
             }
 
             if (fwrite(track_buffer, sizeof(uint8_t), SECTOR_SIZE * dparams->sector, image_file_ptr) < SECTOR_SIZE * dparams->sector) {
+            //if (fwrite(track_buffer, sizeof(unsigned char), SECTOR_SIZE * dparams->sector, image_file_ptr) < SECTOR_SIZE * dparams->sector) {
                 fprintf(stderr, "\aProblem occurred writing to file. Make sure you have the right disk!\n");
                 //TODO: Let user try again
-                free(tack_buffer);
+                free(track_buffer);
                 track_buffer = NULL;
                 return 1;
             }
 
-            fclose(track_buffer);
+            fclose(image_file_ptr);
         }
     }
+    
+    free(track_buffer);
+    track_buffer = NULL;
+    
+    return 0;
 }

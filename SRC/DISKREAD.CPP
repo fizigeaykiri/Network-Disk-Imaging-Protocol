@@ -13,6 +13,7 @@ uint64_t DISKREAD::cur_log_sector = 0;
 uint64_t DISKREAD::total_bytes = 0; 
 int DISKREAD::error_countdown = 0;
 int DISKREAD::disk_error_count = 0;
+int DISKREAD::disk_err_map_len = 0;
 
 struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 {
@@ -154,7 +155,7 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
         }
     } while (status > 0);
 
-    display_buffer(mbr_data, SECTOR_SIZE);
+    //display_buffer(mbr_data, SECTOR_SIZE);
     
     // Check MBR Signature
     //if ((uint16_t) mbr_data[SECTOR_SIZE-2] != 0xAA55) {
@@ -178,7 +179,7 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
     }
 
     if (disk_err_map == NULL) {
-        disk_err_map = malloc(DISK_ERR_ARRAY_LEN);
+        disk_err_map = (struct disk_error_map*) malloc(DISK_ERR_ARRAY_LEN);
         if (disk_err_map == NULL) {
             fprintf(stderr, "Couldn't allocate memory to store disk error map. Try freeing TSRs.\n");
             return -1;
@@ -253,7 +254,7 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
 
                 if (disk_error_count == disk_err_map_len) {
                     struct disk_error_map *old_ptr = disk_err_map;
-                    disk_err_map = realloc(disk_err_map, disk_err_map_len + DISK_ERR_ARRAY_LEN);
+                    disk_err_map = (struct disk_error_map*) realloc(disk_err_map, disk_err_map_len + DISK_ERR_ARRAY_LEN);
                     if (disk_err_map == NULL) {
                         free(old_ptr);
                         old_ptr = NULL;
@@ -293,7 +294,7 @@ int DISKREAD::save_err_map(char *filename)
             disk_err_map[i].track, disk_err_map[i].head, disk_err_map[i].sector, disk_err_map[i].err_val);
     }
 
-    fclose(file_tr);
+    fclose(file_ptr);
 
     return 0;
 }
@@ -318,6 +319,7 @@ void DISKREAD::handle_error(uint16_t status, bool skippable)
                 printf("\aAttempted %d times. Try again? ([Y]es, [C]ancel): ", ERR_TIMER_START);
             }
             c = getchar();
+            printf("\n");
 
             switch (c) {
                 case 'Y': 
@@ -343,7 +345,8 @@ void DISKREAD::handle_error(uint16_t status, bool skippable)
                     valid_input = false;
             }
         } while(!valid_input);
-        printf("\n");
+        
+        fseek(stdin, 0, SEEK_END);
     }
 }
 
