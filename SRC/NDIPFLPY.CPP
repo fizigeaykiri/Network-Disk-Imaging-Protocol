@@ -15,7 +15,9 @@ struct diskinfo_t* get_disk(void);
 int get_mbr(int disk_num);
 //int save_mbr(uint8_t *mbr_data);
 int save_mbr(unsigned char *mbr_data);
-int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_per_chunk);
+//int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_per_chunk);
+int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk);
+int save_error_map(void);
 
 int num_disk_errors = 0;
 char file_path[256] = {0};
@@ -28,7 +30,7 @@ int main(int argc, char *argv[])
     int ret_code;
     uint16_t chunk_size = 0;
     //unsigned long chunk_size = 0;
-    uint32_t sectors_per_chunk = 0;
+    uint32_t sectors_per_chunk = 1000;
     //unsigned int sectors_per_chunk = 0;
 
     printf("NDIPFLPY - NDIP (Network Disk Imaging Protocol) to Floppy\n");
@@ -80,7 +82,7 @@ int main(int argc, char *argv[])
     printf(">");
 
     do {
-        if (fgets(file_name, 8, stdin) == NULL) {
+        if (fgets(file_name, 9, stdin) == NULL) {
             fprintf(stderr, "Error processing filename.\n");
             free(dparams);
             dparams = NULL;
@@ -99,7 +101,7 @@ int main(int argc, char *argv[])
             printf(">");
         }
     //} while (strlen(file_name) == 0 || strchr(file_name, '.' > 0));
-    } while (strcmp(file_name, "\n") == 0 || strchr(file_name, '.' > 0));
+    } while (strcmp(file_name, "\n") == 0 || strchr(file_name, '.') > 0);
 
     strtok(file_name, "\n");
     fseek(stdin, 0, SEEK_END);
@@ -127,13 +129,29 @@ int main(int argc, char *argv[])
     }
     
     // TODO: Verify the chunk size will fit on the disk
-
+    /*
     if (get_mbr(dparams->drive) > 1) {
     //if (get_mbr(0) > 1) {
         free(dparams);
         dparams = NULL;
         return 1;
-    }   
+    } 
+    */
+    
+    if (read_disk(dparams, sectors_per_chunk) > 1) {
+        free(dparams);
+        dparams = NULL;
+        return 1;
+    }
+    
+    if (save_error_map() > 1) {
+        free(dparams);
+        dparams = NULL;
+        return 1;
+    }
+    
+    free(dparams);
+    dparams = NULL;
 
     return 0;
 }
@@ -264,24 +282,24 @@ int save_mbr(uint8_t *mbr_data)
     return 0;
 }
 
-int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_per_chunk)
+int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
 {
     if (dparams == NULL) {
         fprintf(stderr, "read_disk() was called with null-pointer in dparams.\n");
         return 1;
     }
 
-    if (strlen(filename)) {
-        fprintf(stderr, "read_disk() was called with no string passed in for filename.\n");
+    if (strlen(file_name) == 0) {
+        fprintf(stderr, "read_disk() was called with no string passed in for file_name.\n");
         return 1;
     }
 
-    if (strlen(file_path)) {
+    if (strlen(file_path) == 0) {
         fprintf(stderr, "read_disk() was called with no string passed in for file_path.\n");
         return 1;
     }
 
-    uint8_t *track_buffer = (uint8_t*) malloc(SECTOR_SIZE * (dparams->sector + 1));
+    uint8_t *track_buffer = (uint8_t*) calloc(SECTOR_SIZE * (dparams->sector + 1), sizeof(uint8_t));
     //unsigned char *track_buffer = (unsigned char *) malloc(SECTOR_SIZE * (dparams->sector + 1));
     if (track_buffer == NULL) {
         fprintf(stderr, "Couldn't allocate enough memory for track buffer. Try removing TSRs.\n");
@@ -296,11 +314,11 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
     FILE *image_file_ptr = NULL;
 
     strcpy(full_filename, file_path);
-    if (full_filename[strlen(file_path)-1] != '/') {
-        full_filename[strlen(file_path)] = '/';
+    if (full_filename[strlen(file_path)-1] != '\\') {
+        full_filename[strlen(file_path)] = '\\';
     }
-    strcat(full_filename, filename);
-    ext_loc = strlen(full_filename);
+    strcat(full_filename, file_name);
+    ext_loc = strlen(full_filename) + 1;
 
     if (sectors_per_chunk > 0) {
         strcat(full_filename, ".000");
@@ -308,8 +326,14 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
         strcat(full_filename, ".IMG");
     }
 
-    for (int t = 0; t < dparams->track; t++) {
-        for (int h = 0; h < dparams->head; h++) {
+    printf("Opening %s\n", full_filename);
+    
+    // Test just track 0 at first
+    //int t = 0;
+    //for (int t = 0; t < dparams->track; t++) {
+    for (int t = 0; t < 40; t++) {
+        //for (int h = 0; h < dparams->head; h++) {
+        for (int h = 0; h < 5; h++) {
             if (DISKREAD::get_track(track_buffer, dparams->drive, h, t) != 0) {
                 free(track_buffer);
                 track_buffer = NULL;
@@ -323,9 +347,11 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
                     chunk_count++;
                     sector_count_in_chunk = 0;
 
-                    sprintf(full_filename + ext_loc, "%00d", chunk_count);
+                    sprintf(full_filename + ext_loc, "%03d", chunk_count);
 
-                    printf("Chunk file on disk now full. Please replace disk and press any key to continue.\n");
+                    printf("\aChunk file on disk now full. Please replace disk and press any key to continue.\n");
+                    _bios_keybrd(_NKEYBRD_READ);
+                    
                     printf("Opening %s\n", full_filename);
                 }
             }
@@ -357,3 +383,24 @@ int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int s
     
     return 0;
 }
+
+int save_error_map(void)
+{
+    if (DISKREAD::get_disk_error_count() == 0) {
+        return 0;
+    }
+    
+    char full_filename[270] = {0};
+    strcpy(full_filename, file_path);
+    strcat(full_filename, file_name);
+    
+    printf("Errors were found while imaging the disk. A summary of these errors will be\n");
+    printf("saved as a textfile in the specified path. Prepare disk and press any key\n");
+    printf("once ready.\n");
+    _bios_keybrd(_NKEYBRD_READ);
+    
+    return DISKREAD::save_err_map(full_filename);
+}
+
+
+    

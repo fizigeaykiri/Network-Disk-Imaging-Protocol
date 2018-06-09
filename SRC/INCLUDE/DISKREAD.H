@@ -40,6 +40,7 @@ class DISKREAD
         static int query_mbr(uint8_t *mbr_data, int drive_num);
         static int get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t track_num);
         static int save_err_map(char *filename);
+        static int get_disk_error_count(void);
 
     private:
         DISKREAD(void);

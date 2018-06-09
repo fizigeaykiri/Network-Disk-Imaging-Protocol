@@ -24,8 +24,8 @@ struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
     //uint32_t total_sectors;
 
     regs.h.ah = 0x08;
-    //regs.h.dl = 0x80 | disk_num;
-    regs.h.dl = disk_num;
+    regs.h.dl = 0x80 | disk_num;
+    //regs.h.dl = disk_num;
 
     // Set the segment and index to gaurd against BIOS bugs
     regs.w.di = 0x0000;
@@ -198,7 +198,7 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
     }*/
 
     struct diskinfo_t di;
-    uint8_t status = 0;
+    uint8_t status = 1;
 
     di.drive = 0x80 | disk_num;
     di.head = head_num;
@@ -209,7 +209,9 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
 
     printf("Reading Track %d, Head %d\n", di.track, di.head);
 
-    for (error_countdown = ERR_TIMER_CANCEL; status > 0 && error_countdown != ERR_TIMER_SKIP; handle_error(status, true)) {
+    for (error_countdown = ERR_TIMER_START; status > 0 && error_countdown != ERR_TIMER_SKIP; handle_error(status, true)) {
+    //error_countdown = ERR_TIMER_CANCEL;
+    //do {
         if (error_countdown == ERR_TIMER_CANCEL) {
             free(disk_err_map);
             disk_err_map = NULL;
@@ -217,16 +219,17 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
         }
 
         status = _bios_disk(_DISK_READ, &di) >> 8;
-
+        //printf("Status: %0X\n", status);
+        
         if (status > 0) {
             _bios_disk(_DISK_RESET, &di);
+            //handle_error(status, true);
         }
-    }
-
-    printf("Attempting to read each sector invididually on track\n");
+    } //while (status > 0 && error_countdown != ERR_TIMER_SKIP);
 
     // If error is encountered, try to read each sector independently
     if (status > 0) {
+        printf("Attempting to read each sector individually on track\n");
         di.nsectors = 1;
         for (int i = 1; i <= disk_params.sector; i++) {
             di.sector = i;
@@ -271,7 +274,7 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
 
 int DISKREAD::save_err_map(char *filename)
 {
-    char full_filename[12] = {0};
+    char full_filename[270] = {0};
     FILE *file_ptr;
     if (strlen(filename) == 0) {
         fprintf(stderr, "save_err_map() called without specifying filename.\n");
@@ -297,6 +300,11 @@ int DISKREAD::save_err_map(char *filename)
     fclose(file_ptr);
 
     return 0;
+}
+
+int DISKREAD::get_disk_error_count(void)
+{
+    return disk_error_count;
 }
 
 void DISKREAD::handle_error(uint16_t status, bool skippable)
