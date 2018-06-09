@@ -6,11 +6,13 @@
 #include "DISKREAD.H"
 
 uint8_t DISKREAD::sec_buffer[SECTOR_SIZE] = {0};
+static struct disk_error_map *DISKREAD::disk_err_map = NULL;
 struct diskinfo_t DISKREAD::disk_params;
 uint64_t DISKREAD::total_sectors = 0;
 uint64_t DISKREAD::cur_log_sector = 0;
 uint64_t DISKREAD::total_bytes = 0; 
 int DISKREAD::error_countdown = 0;
+int DISKREAD::disk_error_count = 0;
 
 struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 {
@@ -168,10 +170,142 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
     return 0;
 }
 
+int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t track_num)
+{
+    if (track_data == NULL) {
+        fprintf(stderr, "DISKREAD::get_track() called with a null-pointer in *track_data.\n");
+        return -1;
+    }
+
+    if (disk_err_map == NULL) {
+        disk_err_map = malloc(DISK_ERR_ARRAY_LEN);
+        if (disk_err_map == NULL) {
+            fprintf(stderr, "Couldn't allocate memory to store disk error map. Try freeing TSRs.\n");
+            return -1;
+        }
+        disk_error_count = 0;
+        disk_err_map_len = DISK_ERR_ARRAY_LEN;
+    } /*else if (disk_error_count == disk_err_map_len) {
+        struct disk_error_map *old_ptr = disk_err_map;
+        disk_err_map = realloc(disk_err_map, disk_err_map_len + DISK_ERR_ARRAY_LEN);
+        if (disk_err_map == NULL) {
+            free(old_ptr);
+            old_ptr = NULL;
+            fprintf(stderr, "Couldn't reallocate memory to store disk error map. Try freeing TSRs.\n");
+            return -1;
+        }
+    }*/
+
+    struct diskinfo_t di;
+    uint8_t status = 0;
+
+    di.drive = 0x80 | disk_num;
+    di.head = head_num;
+    di.track = track_num;
+    di.sector = 1;
+    di.nsectors = disk_params.sector;
+    di.buffer = track_data;
+
+    printf("Reading Track %d, Head %d\n", di.track, di.head);
+
+    for (error_countdown = ERR_TIMER_CANCEL; status > 0 && error_countdown != ERR_TIMER_SKIP; handle_error(status, true)) {
+        if (error_countdown == ERR_TIMER_CANCEL) {
+            free(disk_err_map);
+            disk_err_map = NULL;
+            return -2;
+        }
+
+        status = _bios_disk(_DISK_READ, &di) >> 8;
+
+        if (status > 0) {
+            _bios_disk(_DISK_RESET, &di);
+        }
+    }
+
+    printf("Attempting to read each sector invididually on track\n");
+
+    // If error is encountered, try to read each sector independently
+    if (status > 0) {
+        di.nsectors = 1;
+        for (int i = 1; i <= disk_params.sector; i++) {
+            di.sector = i;
+            di.buffer = track_data + (SECTOR_SIZE * i);
+
+            printf("Sector %d of %d\n", di.sector, disk_params.sector);
+
+            for (error_countdown = ERR_TIMER_CANCEL; status > 0 && error_countdown > 0; error_countdown--) {
+                status = _bios_disk(_DISK_READ, &di) >> 8;
+
+                if (status > 0) {
+                    _bios_disk(_DISK_RESET, &di);
+                }
+            }
+
+            if (status > 0) {
+                disk_error(status);
+                memset(di.buffer, 0x90, SECTOR_SIZE);   // Fill in sector with 0x90 (NOP Instruction for safety)
+
+                disk_err_map[disk_error_count].head = di.head;
+                disk_err_map[disk_error_count].track = di.track;
+                disk_err_map[disk_error_count].sector = di.sector;
+                disk_err_map[disk_error_count].err_val = status;
+                disk_error_count++;
+
+                if (disk_error_count == disk_err_map_len) {
+                    struct disk_error_map *old_ptr = disk_err_map;
+                    disk_err_map = realloc(disk_err_map, disk_err_map_len + DISK_ERR_ARRAY_LEN);
+                    if (disk_err_map == NULL) {
+                        free(old_ptr);
+                        old_ptr = NULL;
+                        fprintf(stderr, "Couldn't reallocate memory to store disk error map. Try freeing TSRs.\n");
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+int DISKREAD::save_err_map(char *filename)
+{
+    char full_filename[12] = {0};
+    FILE *file_ptr;
+    if (strlen(filename) == 0) {
+        fprintf(stderr, "save_err_map() called without specifying filename.\n");
+    }
+
+    strcpy(full_filename, filename);
+    strcat(full_filename, ".TXT");
+
+    printf("Writing %s to store disk error map. It lists the locations where errors were found.\n");
+
+    file_ptr = fopen(full_filename, "w");
+    if (file_ptr == NULL) {
+        //TODO: Let user try to save multiple times
+        fprintf(stderr, "Couldn't open %s for writing. Check to make sure you have the right disk.\n", full_filename);
+        return 1;
+    }
+
+    for (int i = 0; i < disk_error_count; i++) {
+        fprintf(file_ptr, "Track/Cylinder: %d, Head: %d, Sector: %d, Error: %d\n", 
+            disk_err_map[i].track, disk_err_map[i].head, disk_err_map[i].sector, disk_err_map[i].err_val);
+    }
+
+    fclose(file_tr);
+
+    return 0;
+}
+
 void DISKREAD::handle_error(uint16_t status, bool skippable)
 {
     char c;
     bool valid_input = false;
+
+    if (status == 0) {
+        return;
+    }
 
     disk_error(status);
     error_countdown--;
@@ -391,7 +525,7 @@ uint16_t DISKREAD::bios_disk_2(uint8_t cmd, uint8_t drive, uint8_t head, uint16_
         }
         
         // Reset Disk and Try again
-        regs.h.al = 0;
+        regs.h.ah = 0;
         int86x(0x13, &regs, &regs, &sregs);
     }
     

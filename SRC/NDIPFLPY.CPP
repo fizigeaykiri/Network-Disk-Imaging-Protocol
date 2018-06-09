@@ -9,15 +9,22 @@
 #include "NDIPTYPE.H"
 #include "DISKREAD.H"
 
+struct diskinfo_t* get_disk(void);
+int get_mbr(int disk_num);
+int save_mbr(uint8_t *mbr_data);
+int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_in_chunk);
+
+int num_disk_errors = 0;
 char file_path[256] = {0};
 char file_name[12] = {0};
+
 
 int main(int argc, char *argv[]) 
 {
     struct diskinfo_t *dparams;
     int ret_code;
-    uint32_t chunk_size;
-    uint sectors_per_chunk;
+    uint32_t chunk_size = 0;
+    uint sectors_per_chunk = 0;
 
     printf("NDIPFLPY - NDIP (Network Disk Imaging Protocol) to Floppy\n");
     printf(" - Saves Disk Image to multiple file chunks on other disks\n");
@@ -92,7 +99,11 @@ int main(int argc, char *argv[])
     }
     // TODO: Verify the chunk size will fit on the disk
 
-    
+    if (get_mbr(dparams->disk) > 1) {
+        free(dparams);
+        dparams = NULL;
+        return 1;
+    }   
 
     return 0;
 }
@@ -210,4 +221,91 @@ int save_mbr(uint8_t *mbr_data)
     fclose(mbr_ptr);
 
     return 0;
+}
+
+int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_in_chunk)
+{
+    if (dparams == NULL) {
+        fprintf(stderr, "read_disk() was called with null-pointer in dparams.\n");
+        return 1;
+    }
+
+    if (strlen(filename)) {
+        fprintf(stderr, "read_disk() was called with no string passed in for filename.\n");
+        return 1;
+    }
+
+    if (strlen(file_path)) {
+        fprintf(stderr, "read_disk() was called with no string passed in for file_path.\n");
+        return 1;
+    }
+
+    uint8_t *track_buffer = malloc(SECTOR_SIZE * (dparams->sector + 1));
+    if (track_buffer == NULL) {
+        fprintf(stderr, "Couldn't allocate enough memory for track buffer. Try removing TSRs.\n");
+        return 1;
+    }
+
+    char full_filename[270] = {0};
+
+    int sector_count_in_chunk = 0;
+    int chunk_count = 0;
+    int ext_loc = 0;
+    FILE *image_file_ptr = NULL;
+
+    strcpy(full_filename, file_path);
+    if (full_filename[strlen(file_path)-1] != '/') {
+        full_filename[strlen(file_path)] = '/';
+    }
+    strcat(full_filename, filename);
+    ext_loc = strlen(full_filename);
+
+    if (sectors_per_chunk > 0) {
+        strcat(full_filename, '.000');
+    } else {
+        strcat(full_filename, '.IMG');
+    }
+
+    for (int t = 0; t < dparams->track; t++) {
+        for (int h = 0; h < dparams->head; h++) {
+            if (DISKREAD::get_track(track_buffer, dparams->disk, h, t) != 0) {
+                free(track_buffer);
+                track_buffer = NULL;
+                return 1;
+            }
+
+            if (sectors_per_chunk > 0) {
+                sector_count_in_chunk += dparams->sector;
+
+                if (sector_count_in_chunk >= sectors_per_chunk) {
+                    chunk_count++;
+                    sector_count_in_chunk = 0;
+
+                    sprintf(full_filename + ext_loc, "%00d", chunk_count);
+
+                    printf("Chunk file on disk now full. Please replace disk and press any key to continue.\n");
+                    printf("Opening %s\n", full_filename);
+                }
+            }
+
+            image_file_ptr = fopen(full_filename, "ab");
+            if (image_file_ptr == NULL) {
+                fprintf(stderr, "\aCould not open image file for writing. Make sure you have the right disk!\n");
+                //TODO: Let user try again
+                free(track_buffer);
+                track_buffer = NULL;
+                return 1;
+            }
+
+            if (fwrite(track_buffer, sizeof(uint8_t), SECTOR_SIZE * dparams->sector, image_file_ptr) < SECTOR_SIZE * dparams->sector) {
+                fprintf(stderr, "\aProblem occurred writing to file. Make sure you have the right disk!\n");
+                //TODO: Let user try again
+                free(tack_buffer);
+                track_buffer = NULL;
+                return 1;
+            }
+
+            fclose(track_buffer);
+        }
+    }
 }
