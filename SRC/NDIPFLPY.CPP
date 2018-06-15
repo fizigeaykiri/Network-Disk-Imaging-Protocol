@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     int ret_code;
     uint16_t chunk_size = 0;
     //unsigned long chunk_size = 0;
-    uint32_t sectors_per_chunk = 1000;
+    uint32_t sectors_per_chunk = 0;
     //unsigned int sectors_per_chunk = 0;
 
     printf("NDIPFLPY - NDIP (Network Disk Imaging Protocol) to Floppy\n");
@@ -129,14 +129,14 @@ int main(int argc, char *argv[])
     }
     
     // TODO: Verify the chunk size will fit on the disk
-    /*
+    
     if (get_mbr(dparams->drive) > 1) {
     //if (get_mbr(0) > 1) {
         free(dparams);
         dparams = NULL;
         return 1;
     } 
-    */
+    
     
     if (read_disk(dparams, sectors_per_chunk) > 1) {
         free(dparams);
@@ -240,11 +240,13 @@ int get_mbr(int disk_num)
     }
 
     // Send to File
+    /*
     if (save_mbr(mbr_data) != 0) {
         free(mbr_data);
         mbr_data = NULL;
         return 1;
     }
+    */
 
     free(mbr_data);
     mbr_data = NULL;
@@ -330,30 +332,14 @@ int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
     
     // Test just track 0 at first
     //int t = 0;
-    //for (int t = 0; t < dparams->track; t++) {
-    for (int t = 0; t < 40; t++) {
-        //for (int h = 0; h < dparams->head; h++) {
-        for (int h = 0; h < 5; h++) {
+    for (uint16_t t = 0; t < dparams->track; t++) {
+    //for (int t = 0; t < 1; t++) {
+        for (uint8_t h = 0; h < dparams->head; h++) {
+        //for (int h = 0; h < 5; h++) {
             if (DISKREAD::get_track(track_buffer, dparams->drive, h, t) != 0) {
                 free(track_buffer);
                 track_buffer = NULL;
                 return 1;
-            }
-
-            if (sectors_per_chunk > 0) {
-                sector_count_in_chunk += dparams->sector;
-
-                if (sector_count_in_chunk >= sectors_per_chunk) {
-                    chunk_count++;
-                    sector_count_in_chunk = 0;
-
-                    sprintf(full_filename + ext_loc, "%03d", chunk_count);
-
-                    printf("\aChunk file on disk now full. Please replace disk and press any key to continue.\n");
-                    _bios_keybrd(_NKEYBRD_READ);
-                    
-                    printf("Opening %s\n", full_filename);
-                }
             }
 
             image_file_ptr = fopen(full_filename, "ab");
@@ -375,6 +361,24 @@ int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
             }
 
             fclose(image_file_ptr);
+            
+            if (sectors_per_chunk > 0) {
+                sector_count_in_chunk += dparams->sector;
+
+                if (sector_count_in_chunk >= sectors_per_chunk) {
+                    fseek(stdin, 0, SEEK_END);
+                    chunk_count++;
+                    sector_count_in_chunk = 0;
+
+                    sprintf(full_filename + ext_loc, "%03d", chunk_count);
+
+                    printf("\aChunk file on disk now full. Please replace disk and press any key to continue.\n");
+                    //_bios_keybrd(_NKEYBRD_READ);
+                    _bios_keybrd(_KEYBRD_READ);
+                    
+                    printf("Opening %s\n", full_filename);
+                }
+            }
         }
     }
     
@@ -392,12 +396,16 @@ int save_error_map(void)
     
     char full_filename[270] = {0};
     strcpy(full_filename, file_path);
+    if (full_filename[strlen(file_path)-1] != '\\') {
+        full_filename[strlen(file_path)] = '\\';
+    }
     strcat(full_filename, file_name);
     
     printf("Errors were found while imaging the disk. A summary of these errors will be\n");
     printf("saved as a textfile in the specified path. Prepare disk and press any key\n");
     printf("once ready.\n");
-    _bios_keybrd(_NKEYBRD_READ);
+    //_bios_keybrd(_NKEYBRD_READ);
+    _bios_keybrd(_KEYBRD_READ);
     
     return DISKREAD::save_err_map(full_filename);
 }

@@ -17,6 +17,8 @@ int CLSOCKET::initialize(void)
 {
     uint8_t foobar = 20;
     
+    printf("CLSOCKET::initialize()\n");
+    
     // Setup mTCP environment
     if (Utils::parseEnv() != 0) {
         return -1;
@@ -39,7 +41,7 @@ int CLSOCKET::connect_server(void)
 */
 
 int CLSOCKET::connect_server(char* nservAddrName)
-{
+{    
     return connect_server(nservAddrName, SERV_PORT);
 }
 
@@ -48,6 +50,8 @@ int CLSOCKET::connect_server(char* nservAddrName, uint16_t servPort)
     IpAddr_t serverAddr;
     int8_t rc;
 
+    printf("CLSOCKET::connect_server()\n");
+    
     // Resolve this name and definitely send the request
     int8_t rc2 = Dns::resolve(nservAddrName, serverAddr, 1);
     if (rc2 < 0) {
@@ -121,6 +125,8 @@ int CLSOCKET::update_connection(void)
 
 int8_t CLSOCKET::send_data(uint8_t *sendBuffer, int char_count)
 {
+    printf("CLSOCKET::send_data()\n");
+    
     int8_t sendRc = mySocket->send(sendBuffer, char_count);
 
     return sendRc;
@@ -133,6 +139,8 @@ int16_t CLSOCKET::recv_data(uint8_t *recvBuffer, int16_t recv_buffer_size)
         return -1;
     }
 
+    printf("CLSOCKET::recv_data()\n");
+    
     //int16_t recvRc = mySocket->recv(recvBuffer, RECV_BUFFER_SIZE);
     int16_t recvRc = mySocket->recv(recvBuffer, recv_buffer_size);
 
@@ -149,6 +157,8 @@ int16_t CLSOCKET::recv_data(uint8_t *recvBuffer, int16_t recv_buffer_size)
 
 void CLSOCKET::close_connection(void)
 {
+    printf("CLSOCKET::close_connection\n");
+    
     mySocket->close();
     TcpSocketMgr::freeSocket(mySocket);
     shutdown();
@@ -156,6 +166,8 @@ void CLSOCKET::close_connection(void)
 
 void CLSOCKET::shutdown(void)
 {
+    printf("CLSOCKET::shutdown\n");
+    
     Utils::endStack();
     Utils::dumpStats(stderr);
     fclose(TrcStream);

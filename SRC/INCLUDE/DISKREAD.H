@@ -23,11 +23,11 @@
 #define ERR_TIMER_CANCEL     -1
 #define ERR_TIMER_SKIP       -2
 
-#define DISK_ERR_ARRAY_LEN    2000
+#define DISK_ERR_ARRAY_LEN    5000
 
 struct disk_error_map {
-    uint8_t head;
-    uint8_t track;
+    uint16_t track;
+    uint8_t head;    
     uint8_t sector;
     uint8_t err_val;
 };
@@ -38,7 +38,7 @@ class DISKREAD
         static struct diskinfo_t query_disks(uint8_t disk_num);
         static int verify_mbr(uint8_t drive_num);
         static int query_mbr(uint8_t *mbr_data, int drive_num);
-        static int get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t track_num);
+        static int get_track(uint8_t *track_data, uint8_t disk_num, uint8_t head_num, uint16_t track_num);
         static int save_err_map(char *filename);
         static int get_disk_error_count(void);
 

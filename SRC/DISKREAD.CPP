@@ -155,7 +155,7 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
         }
     } while (status > 0);
 
-    //display_buffer(mbr_data, SECTOR_SIZE);
+    display_buffer(mbr_data, SECTOR_SIZE);
     
     // Check MBR Signature
     //if ((uint16_t) mbr_data[SECTOR_SIZE-2] != 0xAA55) {
@@ -171,7 +171,7 @@ int DISKREAD::query_mbr(uint8_t *mbr_data, int drive_num)
     return 0;
 }
 
-int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t track_num)
+int DISKREAD::get_track(uint8_t *track_data, uint8_t disk_num, uint8_t head_num, uint16_t track_num)
 {
     if (track_data == NULL) {
         fprintf(stderr, "DISKREAD::get_track() called with a null-pointer in *track_data.\n");
@@ -209,6 +209,8 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
 
     printf("Reading Track %d, Head %d\n", di.track, di.head);
 
+    fseek(stdin, 0, SEEK_END);
+    
     for (error_countdown = ERR_TIMER_START; status > 0 && error_countdown != ERR_TIMER_SKIP; handle_error(status, true)) {
     //error_countdown = ERR_TIMER_CANCEL;
     //do {
@@ -219,6 +221,7 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
         }
 
         status = _bios_disk(_DISK_READ, &di) >> 8;
+        //status = 2;
         //printf("Status: %0X\n", status);
         
         if (status > 0) {
@@ -233,13 +236,13 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
         di.nsectors = 1;
         for (int i = 1; i <= disk_params.sector; i++) {
             di.sector = i;
-            di.buffer = track_data + (SECTOR_SIZE * i);
+            di.buffer = track_data + (SECTOR_SIZE * (i-1));
 
             printf("Sector %d of %d\n", di.sector, disk_params.sector);
 
-            for (error_countdown = ERR_TIMER_CANCEL; status > 0 && error_countdown > 0; error_countdown--) {
+            for (error_countdown = ERR_TIMER_START; status > 0 && error_countdown > 0; error_countdown--) {
                 status = _bios_disk(_DISK_READ, &di) >> 8;
-
+                //status = 1;
                 if (status > 0) {
                     _bios_disk(_DISK_RESET, &di);
                 }
@@ -247,7 +250,7 @@ int DISKREAD::get_track(uint8_t *track_data, int disk_num, int head_num, uint8_t
 
             if (status > 0) {
                 disk_error(status);
-                memset(di.buffer, 0x90, SECTOR_SIZE);   // Fill in sector with 0x90 (NOP Instruction for safety)
+                //memset(di.buffer, 0x90, SECTOR_SIZE);   // Fill in sector with 0x90 (NOP Instruction for safety)
 
                 disk_err_map[disk_error_count].head = di.head;
                 disk_err_map[disk_error_count].track = di.track;
@@ -276,14 +279,14 @@ int DISKREAD::save_err_map(char *filename)
 {
     char full_filename[270] = {0};
     FILE *file_ptr;
-    if (strlen(filename) == 0) {
+    if (filename == NULL || strlen(filename) == 0) {
         fprintf(stderr, "save_err_map() called without specifying filename.\n");
     }
 
     strcpy(full_filename, filename);
     strcat(full_filename, ".TXT");
 
-    printf("Writing %s to store disk error map. It lists the locations where errors were found.\n");
+    printf("Writing %s to store disk error map. It lists the locations where errors were found.\n", full_filename);
 
     file_ptr = fopen(full_filename, "w");
     if (file_ptr == NULL) {

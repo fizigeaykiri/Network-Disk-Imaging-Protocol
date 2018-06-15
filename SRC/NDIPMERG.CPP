@@ -5,6 +5,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <bios.h>
 
 #define CHUNK_BUFF_SIZE     8192
@@ -68,7 +69,7 @@ int main(int argc, char *argv[])
             printf(">");
         }
 
-        if (strcmp(file_name, "\n") == 0) {
+        if (strcmp(src_file_name, "\n") == 0) {
             printf("You need to enter a filename. Try again.\n");
             printf(">");
         }
@@ -88,7 +89,7 @@ int main(int argc, char *argv[])
             return 1;
         }
 
-        if (strcmp(des_file_name, "\n") == 0) {
+        if (strcmp(dest_file_name, "\n") == 0) {
             printf("You need to enter a filename. Try again.\n");
             printf(">");
         }
@@ -96,16 +97,23 @@ int main(int argc, char *argv[])
 
     strtok(dest_file_name, "\n");
     if (strchr(dest_file_name, '.') == NULL) {
-        strcat(dest_file_name, '.IMG');
+        strcat(dest_file_name, ".IMG");
     }
     fseek(stdin, 0, SEEK_END);
 
+    char src_full_filename[270] = {0};
+    strcpy(src_full_filename, src_file_path);
+    if (src_full_filename[strlen(src_file_path)-1] != '\\') {
+        src_full_filename[strlen(src_file_path)] = '\\';
+    }
+    strcat(src_full_filename, src_file_name);
+    
     unsigned int chunk_num = 0;
     unsigned long chunk_offset = 0;
     printf("Reading Chunk %d\n", chunk_num);
 
     while (true) {
-        int status = read_chunk(chunk_buffer, chunk_offset, src_file_name, chunk_num);
+        int status = read_chunk(chunk_buffer, chunk_offset, src_full_filename, chunk_num);
         if (status == -2) {
             printf("Disk Image merger complete.\n");
             return 0;
@@ -147,9 +155,9 @@ int read_chunk(unsigned char *chunk_buff, unsigned long chunk_offset, char *file
     int ext_loc;
 
     strcpy(full_filename, file_name);
-    ext_loc = strlen(full_filename) + 1;
+    ext_loc = strlen(full_filename);
 
-    sprintf(full_filename + ext_loc, "%03d", chunk_num);
+    sprintf(full_filename + ext_loc, ".%03d", chunk_num);
 
     FILE *chunk_file_ptr = NULL;
 
@@ -169,7 +177,7 @@ int read_chunk(unsigned char *chunk_buff, unsigned long chunk_offset, char *file
     }
 
     if (feof(chunk_file_ptr)) {
-        flcose(chunk_file_ptr);
+        fclose(chunk_file_ptr);
         chunk_file_ptr = NULL;
         return 0;
     }
@@ -205,7 +213,7 @@ int write_full_image(unsigned char *chunk_buff, unsigned int chunk_buff_len, cha
         fprintf(stderr, "Couldn't write all of the data to image file. Make sure your destination has\n");
         fprintf(stderr, "enough space.\n");
         fclose(full_image_ptr);
-        full_image_ptr = NULL
+        full_image_ptr = NULL;
         return -1;
     }
 
