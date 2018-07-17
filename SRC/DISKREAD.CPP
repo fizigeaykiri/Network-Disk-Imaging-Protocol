@@ -14,6 +14,7 @@ uint64_t DISKREAD::total_bytes = 0;
 int DISKREAD::error_countdown = 0;
 int DISKREAD::disk_error_count = 0;
 int DISKREAD::disk_err_map_len = 0;
+bool DISKREAD::auto_skip_error = 0;
 
 struct diskinfo_t DISKREAD::query_disks(uint8_t disk_num)
 {
@@ -211,6 +212,8 @@ int DISKREAD::get_track(uint8_t *track_data, uint8_t disk_num, uint8_t head_num,
 
     fseek(stdin, 0, SEEK_END);
     
+    // You can use the alternative line below if you get many errors and want to speed it up a little
+    //for (error_countdown = 1; status > 0 && error_countdown != ERR_TIMER_SKIP; handle_error(status, true)) {
     for (error_countdown = ERR_TIMER_START; status > 0 && error_countdown != ERR_TIMER_SKIP; handle_error(status, true)) {
     //error_countdown = ERR_TIMER_CANCEL;
     //do {
@@ -243,8 +246,16 @@ int DISKREAD::get_track(uint8_t *track_data, uint8_t disk_num, uint8_t head_num,
             for (error_countdown = ERR_TIMER_START; status > 0 && error_countdown > 0; error_countdown--) {
                 status = _bios_disk(_DISK_READ, &di) >> 8;
                 //status = 1;
-                if (status > 0) {
+                if (status > 0) {                    
                     _bios_disk(_DISK_RESET, &di);
+                    // Alternative Temporary speed up
+                    /*
+                    if (i > 1) {
+                        error_countdown = 0;
+                    } else {
+                        _bios_disk(_DISK_RESET, &di);
+                    }
+                    */
                 }
             }
 
@@ -310,6 +321,11 @@ int DISKREAD::get_disk_error_count(void)
     return disk_error_count;
 }
 
+void DISKREAD::set_auto_skip_error(bool flag)
+{
+    auto_skip_error = flag;
+}
+
 void DISKREAD::handle_error(uint16_t status, bool skippable)
 {
     char c;
@@ -323,6 +339,11 @@ void DISKREAD::handle_error(uint16_t status, bool skippable)
     error_countdown--;
 
     if (error_countdown <= 0) {
+        if (skippable && auto_skip_error) {
+            error_countdown = ERR_TIMER_SKIP;
+            return;
+        }
+        
         do {
             if (skippable) {
                 printf("\aAttempted %d times. Try again? ([Y]es, [C]ancel, [S]kip Operation): ", ERR_TIMER_START);

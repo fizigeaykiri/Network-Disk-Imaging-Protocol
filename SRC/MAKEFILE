@@ -38,7 +38,9 @@ compile_options += -i=$(tcp_h_dir) -i=$(common_h_dir)
 tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj
 objs = mtcptstc.obj
 ndipobjs = ndipcl.obj clsocket.obj diskpkt.obj diskread.obj 
+ndipfplyobjs = ndipflpy.obj diskread.obj
 testobjs = tests.obj diskpkt.obj diskread.obj
+errormapobjs = errormap.obj diskread.obj
 
 all : clean ndipcl.exe
 
@@ -71,6 +73,12 @@ mtcptstc.exe: $(tcpobjs) $(objs)
 ndipcl.exe: $(ndipobjs) $(tcpobjs) 
   wlink system dos option map option stack=4096 name $@ file *.obj
 
+ndipflpy.exe: $(ndipfplyobjs)
+  wlink system dos option map option stack=4096 name $@ file *.obj
+
+errormap.exe: $(errormapobjs)
+  wlink system dos option map option stack=4096 name $@ file *.obj
+  
 tests.exe: $(testobjs)
     wlink system dos option map option stack=4096 name $@ file *.obj
     

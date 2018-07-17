@@ -1,7 +1,7 @@
 
 
 #include "DISKPKT.H"
-#include "DISKREAD.H"
+//#include "DISKREAD.H"
 #include <assert.h>
 
 
@@ -18,7 +18,7 @@ int main(void)
     int code = 0;
     printf("TESTS: NDIP Unit Tests\n");
     code = diskpkt_test();
-    code = diskread_test();
+    //code = diskread_test();
 
     return code;
 }
@@ -92,17 +92,28 @@ int diskpkt_test(void)
     return 0;
 }
 
+/*
 int diskread_test(void)
 {
     printf("diskread_test()\n");
     
+    unsigned char *other_buffer = (unsigned char *) malloc(SECTOR_SIZE);
+    if (other_buffer == NULL) {
+        fprintf(stderr, "Couldn't allocate memory.\n");
+        return 1;
+    }
+    
     struct diskinfo_t dparams = DISKREAD::query_disks(0);
     assert(dparams.drive > 0);
     
-    assert(DISKREAD::query_mbr(sector, 0) == 0);
-    
+    assert(DISKREAD::query_mbr(other_buffer, 0) == 0);
+
+    free(other_buffer);
+    other_buffer = NULL;
+   
     return 0;
 }
+*/
 
 void display_buffer(uint8_t *buffer, size_t buffer_len)
 {

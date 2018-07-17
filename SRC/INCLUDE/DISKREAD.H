@@ -19,7 +19,7 @@
 #include <bios.h>
 #include <i86.h>
 
-#define ERR_TIMER_START       5
+#define ERR_TIMER_START       5     // Lower this value if you need to speed things up
 #define ERR_TIMER_CANCEL     -1
 #define ERR_TIMER_SKIP       -2
 
@@ -30,6 +30,7 @@ struct disk_error_map {
     uint8_t head;    
     uint8_t sector;
     uint8_t err_val;
+    uint8_t padding;
 };
 
 class DISKREAD
@@ -41,6 +42,7 @@ class DISKREAD
         static int get_track(uint8_t *track_data, uint8_t disk_num, uint8_t head_num, uint16_t track_num);
         static int save_err_map(char *filename);
         static int get_disk_error_count(void);
+        static void set_auto_skip_error(bool flag);
 
     private:
         DISKREAD(void);
@@ -55,6 +57,7 @@ class DISKREAD
         static int error_countdown;
         static int disk_error_count;
         static int disk_err_map_len;
+        static bool auto_skip_error;
     
         static void handle_error(uint16_t status, bool skippable);
         static void disk_error(uint16_t status);

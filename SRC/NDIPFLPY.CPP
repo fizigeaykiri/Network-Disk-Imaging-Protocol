@@ -16,12 +16,13 @@ int get_mbr(int disk_num);
 //int save_mbr(uint8_t *mbr_data);
 int save_mbr(unsigned char *mbr_data);
 //int read_disk(struct diskinfo_t *dparams, char *filename, char *file_path, int sectors_per_chunk);
-int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk);
+int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk, uint16_t start_chunk, uint16_t start_track, uint8_t start_head);
 int save_error_map(void);
 
-int num_disk_errors = 0;
+//int num_disk_errors = 0;
 char file_path[256] = {0};
 char file_name[12] = {0};
+
 
 
 int main(int argc, char *argv[]) 
@@ -32,11 +33,51 @@ int main(int argc, char *argv[])
     //unsigned long chunk_size = 0;
     uint32_t sectors_per_chunk = 0;
     //unsigned int sectors_per_chunk = 0;
+    uint16_t start_chunk_num = 0;
+    uint16_t start_track_num = 0;
+    uint8_t start_head_num = 0;
+
+    //bool auto_skip_error = false;
 
     printf("NDIPFLPY - NDIP (Network Disk Imaging Protocol) to Floppy\n");
     printf(" - Saves Disk Image to multiple file chunks on other disks\n");
     printf("2018 by @marssaturn91\n");
     printf("https://github.com/marssaturn91/Network-Disk-Imaging-Protocol\n\n");
+
+    // Now lets you specify a cmd line arg for auto-skipping disk errors and starting chunk number
+    if (argc > 1) {
+        for (int i = 0; i < argc; i++) {   
+            if (strcmp(argv[i], "/s") == 0 || strcmp(argv[i], "/S") == 0) {
+                //auto_skip_error = true;
+                printf("/S switch provided. Will automatically skip any track reading errors, and\n");
+                printf("attempt to read the sectors individually.\n\n");
+        
+                DISKREAD::set_auto_skip_error(true);
+            }
+
+            if (strcmp(argv[i], "/c") == 0 || strcmp(argv[i], "/C") == 0) {
+                if (argc > i + 3) {
+                    start_chunk_num = atoi(argv[++i]);
+                    if (start_chunk_num < 1) {
+                        printf("/C switch needs chunk number 1 or greater.\n");
+                        return 1;
+                    }
+
+                    start_track_num = atoi(argv[++i]);
+                    if (start_track_num < 1) {
+                        printf("/C switch needs track number 1 or greater.\n");
+                    }
+
+                    start_head_num = atoi(argv[++i]);
+                    
+                    printf("Starting at chunk number %d, from head %d on track %d.\n", start_chunk_num, start_head_num, start_track_num);
+                } else {
+                    printf("/C switch needs the chunk number, track number, and head number to start.\n");
+                    return 1;
+                }
+            }
+        }
+    }
 
     dparams = get_disk();
     //struct diskinfo_t dparams = DISKREAD::query_disks(0);    
@@ -44,7 +85,6 @@ int main(int argc, char *argv[])
         return 1;
     }
     
-
     
     printf("Enter drive and path for the new disk image file.\n");
     printf("Note: If you specify a drive other than A or B, it must store the entire image.\n");
@@ -136,9 +176,8 @@ int main(int argc, char *argv[])
         dparams = NULL;
         return 1;
     } 
-    
-    
-    if (read_disk(dparams, sectors_per_chunk) > 1) {
+        
+    if (read_disk(dparams, sectors_per_chunk, start_chunk_num, start_track_num, start_head_num) > 1) {
         free(dparams);
         dparams = NULL;
         return 1;
@@ -284,7 +323,7 @@ int save_mbr(uint8_t *mbr_data)
     return 0;
 }
 
-int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
+int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk, uint16_t start_chunk, uint16_t start_track, uint8_t start_head)
 {
     if (dparams == NULL) {
         fprintf(stderr, "read_disk() was called with null-pointer in dparams.\n");
@@ -311,7 +350,8 @@ int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
     char full_filename[270] = {0};
 
     int sector_count_in_chunk = 0;
-    int chunk_count = 0;
+    //int chunk_count = 0;
+    int chunk_count = start_chunk;
     int ext_loc = 0;
     FILE *image_file_ptr = NULL;
 
@@ -324,9 +364,18 @@ int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
 
     if (sectors_per_chunk > 0) {
         strcat(full_filename, ".000");
+        sprintf(full_filename + ext_loc, "%03d", chunk_count);
     } else {
         strcat(full_filename, ".IMG");
     }
+
+    // Set flag if starting track and head provided
+    bool startTrackHeadSet = (start_track > 0 || start_head > 0) ? true : false;
+    /*
+    if (start_track > 0 || start_head > 0) {
+        startTrackHeadSet = true;
+    }
+    */
 
     printf("Opening %s\n", full_filename);
     
@@ -336,6 +385,13 @@ int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
     //for (int t = 0; t < 1; t++) {
         for (uint8_t h = 0; h < dparams->head; h++) {
         //for (int h = 0; h < 5; h++) {
+
+            if (startTrackHeadSet) {
+                t = start_track;
+                h = start_head;
+                startTrackHeadSet = false;
+            }
+
             if (DISKREAD::get_track(track_buffer, dparams->drive, h, t) != 0) {
                 free(track_buffer);
                 track_buffer = NULL;
@@ -387,6 +443,32 @@ int read_disk(struct diskinfo_t *dparams, int sectors_per_chunk)
     
     return 0;
 }
+
+/*
+struct diskinfo_t get_track_head_from_start_chunk(struct diskinfo_t *dparams, int sectors_per_chunk, uint16_t starting_chunk_num)
+{
+    struct diskinfo_t di;
+
+    if (dparams == NULL) {
+        printf(stderr, "get_track_head_from_start_chunk() called without dparams parameter.\n");
+        di.track = 0;
+        di.sector = 0;
+        di.head = 0;
+        di.drive = 0;
+        return di;
+    }
+
+    uint32_t logical_sector_num = sectors_per_chunk * starting_chunk_num;
+
+    uint32_t head_cylinder = logical_sector_num / dparams->sector;
+    di.track = head_cylinder / dparams->head;
+    di.head = head_cylinder % dparams->head;
+    di.sector = 1;
+    di.drive = dparams->drive;
+
+    return di;
+}
+*/
 
 int save_error_map(void)
 {
